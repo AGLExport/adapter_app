@@ -1,0 +1,7 @@
+adapter
+*.sh
+.adapter*
+make_bins.sh
+*.o
+*.c.*
+*.h.*
