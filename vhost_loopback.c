@@ -1,5 +1,5 @@
 /*
- * Based on vhost.c of Qemu project;
+ * Based on vhost.c of QEMU project;
  *
  *   Copyright Red Hat, Inc. 2010
  *

@@ -39,7 +39,8 @@ typedef struct VirtIORNG {
     VirtIORNGConf conf;
     RngBackend *rng;
 
-    /* We purposefully don't migrate this state.  The quota will reset on the
+    /*
+     * We purposefully don't migrate this state.  The quota will reset on the
      * destination as a result.  Rate limiting is host state, not guest state.
      */
     int64_t quota_remaining;

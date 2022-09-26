@@ -1,5 +1,5 @@
 /*
- * Based on vhost-user-rng of Qemu project
+ * Based on vhost-user-rng of QEMU project
  *
  * Copyright (c) 2021 Mathieu Poirier <mathieu.poirier@linaro.org>
  *
@@ -131,9 +131,9 @@ static void vu_rng_set_status(VirtIODevice *vdev, uint8_t status)
     }
 }
 
-static void virtio_dev_class_init (VirtIODevice *vdev) {
-
-    vdev->vdev_class = (VirtioDeviceClass *) malloc(sizeof(VirtioDeviceClass));
+static void virtio_dev_class_init(VirtIODevice *vdev)
+{
+    vdev->vdev_class = (VirtioDeviceClass *)malloc(sizeof(VirtioDeviceClass));
     vdev->vdev_class->parent = vdev;
     vdev->vdev_class->set_status = vu_rng_set_status;
     vdev->vdev_class->get_features = vu_rng_get_features;
@@ -142,16 +142,16 @@ static void virtio_dev_class_init (VirtIODevice *vdev) {
 }
 
 
-void vhost_user_rng_init(VirtIODevice *vdev) {
-
-    VHostUserRNG *vhrng = (VHostUserRNG*) malloc (sizeof(VHostUserRNG));
+void vhost_user_rng_init(VirtIODevice *vdev)
+{
+    VHostUserRNG *vhrng = (VHostUserRNG *)malloc(sizeof(VHostUserRNG));
     vdev->vhrng = vhrng;
     vhrng->parent = vdev;
     vhrng->req_vq = vdev->vq;
     vhrng->vhost_dev = dev;
 
-    virtio_dev_class_init (vdev);
-    virtio_mmio_bus_init(vdev->vbus);
+    virtio_dev_class_init(vdev);
+    virtio_loopback_bus_init(vdev->vbus);
 }
 
 static void vu_rng_handle_output(VirtIODevice *vdev, VirtQueue *vq)
@@ -175,14 +175,15 @@ void vhost_user_rng_realize(void)
 
     global_vdev->host_features = 0x39000000;
 
-    proxy = (VirtIOMMIOProxy*) malloc (sizeof(VirtIOMMIOProxy));
+    proxy = (VirtIOMMIOProxy *)malloc(sizeof(VirtIOMMIOProxy));
     *proxy = (VirtIOMMIOProxy) {
         .legacy = 1,
     };
 
     /* Virtqueues conf */
     dev->nvqs = 1;
-    dev->vqs = (struct vhost_virtqueue*) malloc(dev->nvqs * sizeof(struct vhost_virtqueue));
+    dev->vqs = (struct vhost_virtqueue *)malloc(dev->nvqs *
+                                                sizeof(struct vhost_virtqueue));
 
     vhost_dev_init(dev);
 }

@@ -1,5 +1,5 @@
 /*
- * Based on libvhost-user.h of Qemu project
+ * Based on libvhost-user.h of QEMU project
  *
  *   Copyright (c) 2016 Red Hat, Inc.
  *
@@ -314,8 +314,10 @@ typedef struct VuDevIface {
     vu_get_features_cb get_features;
     /* enable vhost implementation features */
     vu_set_features_cb set_features;
-    /* get the protocol feature bitmask from the underlying vhost
-     * implementation */
+    /*
+     * get the protocol feature bitmask from the underlying vhost
+     * implementation
+     */
     vu_get_features_cb get_protocol_features;
     /* enable protocol features in the underlying vhost implementation. */
     vu_set_features_cb set_protocol_features;
@@ -348,19 +350,25 @@ typedef struct VuRing {
 } VuRing;
 
 typedef struct VuDescStateSplit {
-    /* Indicate whether this descriptor is inflight or not.
-     * Only available for head-descriptor. */
+    /*
+     * Indicate whether this descriptor is inflight or not.
+     * Only available for head-descriptor.
+     */
     uint8_t inflight;
 
     /* Padding */
     uint8_t padding[5];
 
-    /* Maintain a list for the last batch of used descriptors.
-     * Only available when batching is used for submitting */
+    /*
+     * Maintain a list for the last batch of used descriptors.
+     * Only available when batching is used for submitting
+     */
     uint16_t next;
 
-    /* Used to preserve the order of fetching available descriptors.
-     * Only available for head-descriptor. */
+    /*
+     * Used to preserve the order of fetching available descriptors.
+     * Only available for head-descriptor.
+     */
     uint64_t counter;
 } VuDescStateSplit;
 
@@ -368,15 +376,21 @@ typedef struct VuVirtqInflight {
     /* The feature flags of this region. Now it's initialized to 0. */
     uint64_t features;
 
-    /* The version of this region. It's 1 currently.
-     * Zero value indicates a vm reset happened. */
+    /*
+     * The version of this region. It's 1 currently.
+     * Zero value indicates a vm reset happened.
+     */
     uint16_t version;
 
-    /* The size of VuDescStateSplit array. It's equal to the virtqueue
-     * size. Slave could get it from queue size field of VhostUserInflight. */
+    /*
+     * The size of VuDescStateSplit array. It's equal to the virtqueue
+     * size. Slave could get it from queue size field of VhostUserInflight.
+     */
     uint16_t desc_num;
 
-    /* The head of list that track the last batch of used descriptors. */
+    /*
+     * The head of list that track the last batch of used descriptors.
+     */
     uint16_t last_batch_head;
 
     /* Storing the idx value of used ring */
@@ -721,7 +735,7 @@ void vu_queue_push(VuDev *dev, VuVirtq *vq,
  *
  * Mark the last number of elements as done (used.idx is updated by
  * num elements).
-*/
+ */
 void vu_queue_flush(VuDev *dev, VuVirtq *vq, unsigned int num);
 
 /**
@@ -778,9 +792,11 @@ int vhost_user_set_features(struct vhost_dev *dev,
 int vhost_user_set_mem_table(struct vhost_dev *dev);
 int vhost_user_get_vq_index(struct vhost_dev *dev, int idx);
 void vhost_user_share_fd(void);
-int vhost_user_set_vring_num(struct vhost_dev *dev, struct vhost_vring_state *ring);
-int vhost_user_set_vring_base(struct vhost_dev *dev, struct vhost_vring_state *ring);
-int vhost_user_set_vring_addr(struct vhost_dev *dev, struct vhost_vring_addr *addr);
-
+int vhost_user_set_vring_num(struct vhost_dev *dev,
+                             struct vhost_vring_state *ring);
+int vhost_user_set_vring_base(struct vhost_dev *dev,
+                              struct vhost_vring_state *ring);
+int vhost_user_set_vring_addr(struct vhost_dev *dev,
+                              struct vhost_vring_addr *addr);
 
 #endif /* LIBVHOST_USER_H */

@@ -1,5 +1,5 @@
 /*
- * Based on vhost-user-rng of Qemu project
+ * Based on vhost-user-rng of QEMU project
  *
  * Copyright (c) 2021 Mathieu Poirier <mathieu.poirier@linaro.org>
  *

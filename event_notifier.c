@@ -1,17 +1,17 @@
 /*
  * Based on:
- *  1) file-posix.c of Qemu Project
+ *  1) file-posix.c of QEMU Project
  *
  *     Copyright (c) 2006 Fabrice Bellard
  *
- *  2) event_notifier-posix.c of Qemu Project
+ *  2) event_notifier-posix.c of QEMU Project
  *
  *     Copyright Red Hat, Inc. 2010
  *
  *     Authors:
  *      Michael S. Tsirkin <mst@redhat.com>
  *
- *  3) os-posix-lib.c of Qemu project
+ *  3) os-posix-lib.c of QEMU project
  *
  *     Copyright (c) 2003-2008 Fabrice Bellard
  *     Copyright (c) 2010 Red Hat, Inc.

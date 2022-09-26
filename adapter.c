@@ -52,19 +52,19 @@ struct adapter_dev *adev;
 struct vhost_user *vudev;
 
 
-void vhost_user_adapter_init (void)
+void vhost_user_adapter_init(void)
 {
     /* Init vhost-user device */
-    vudev = (struct vhost_user*) malloc(sizeof(struct vhost_user));
+    vudev = (struct vhost_user *)malloc(sizeof(struct vhost_user));
 
     /* Init vhost device */
-    dev = (struct vhost_dev*) malloc(sizeof(struct vhost_dev));
+    dev = (struct vhost_dev *)malloc(sizeof(struct vhost_dev));
 
     /* Init virtio device */
-    global_vdev = (VirtIODevice*) malloc(sizeof(VirtIODevice));
+    global_vdev = (VirtIODevice *)malloc(sizeof(VirtIODevice));
 
     /* Init virtio bus */
-    global_vbus = (VirtioBus *) malloc(sizeof(VirtioBus));
+    global_vbus = (VirtioBus *)malloc(sizeof(VirtioBus));
     global_vbus->vdev = global_vdev;
     global_vdev->vbus = global_vbus;
 
@@ -72,7 +72,7 @@ void vhost_user_adapter_init (void)
     dev->vdev = global_vdev;
 
     /* Init adapter device */
-    adev = (struct adapter_dev*) malloc(sizeof(struct adapter_dev));
+    adev = (struct adapter_dev *)malloc(sizeof(struct adapter_dev));
     adev->vdev = dev;
     adev->vudev = vudev;
     adev->virtio_dev = global_vdev;
@@ -80,7 +80,7 @@ void vhost_user_adapter_init (void)
 }
 
 
-void client (char *sock_path)
+void client(char *sock_path)
 {
     int rc, len;
     struct sockaddr_un client_sockaddr;
@@ -106,7 +106,7 @@ void client (char *sock_path)
     strcpy(client_sockaddr.sun_path, sock_path);
     len = sizeof(client_sockaddr);
     rc = connect(client_sock, (struct sockaddr *) &client_sockaddr, len);
-    if(rc == -1) {
+    if (rc == -1) {
         printf("CONNECT ERROR\n");
         close(client_sock);
         exit(1);
@@ -114,11 +114,12 @@ void client (char *sock_path)
 
 }
 
-static void help_args (void) {
+static void help_args(void)
+{
     printf("Run example:\n\t./adapter -s /path_to_socket/rng.sock\n");
 }
 
-int main (int argc, char **argv)
+int main(int argc, char **argv)
 {
 #ifdef VHOST_USER_RNG_DEV
     /*
@@ -146,8 +147,8 @@ int main (int argc, char **argv)
     virtio_rng_realize(); /* <-- Enable that for simple rng */
 #endif
 
-    /* Startthe mmio trasnport layer and communiation with the loopback driver */
-    virtio_mmio_start();
+    /* Start loopback trasnport layer and communiation with the loopback driver */
+    virtio_loopback_start();
 
     return 0;
 

@@ -1,20 +1,20 @@
 /*
  * Based on:
- *  1) virtio.h of Qemu project
+ *  1) virtio.h of QEMU project
  *
  *     Copyright IBM, Corp. 2007
  *
  *     Authors:
  *      Anthony Liguori   <aliguori@us.ibm.com>
  *
- *  2) virtio-mmio.h of Qemu project
+ *  2) virtio-mmio.h of QEMU project
  *
  *     Copyright (c) 2011 Linaro Limited
  *
  *     Author:
  *      Peter Maydell <peter.maydell@linaro.org>
  *
- *  3) vhost.h of Qemu project
+ *  3) vhost.h of QEMU project
  *
  * Copyright 2022 Virtual Open Systems SAS.
  *
@@ -43,15 +43,19 @@
 /* Virtio vendor ID - Read Only */
 #define VIRTIO_MMIO_VENDOR_ID       0x00c
 
-/* Bitmask of the features supported by the device (host)
- * (32 bits per set) - Read Only */
+/*
+ * Bitmask of the features supported by the device (host)
+ * (32 bits per set) - Read Only
+ */
 #define VIRTIO_MMIO_DEVICE_FEATURES 0x010
 
 /* Device (host) features set selector - Write Only */
 #define VIRTIO_MMIO_DEVICE_FEATURES_SEL 0x014
 
-/* Bitmask of features activated by the driver (guest)
- * (32 bits per set) - Write Only */
+/*
+ * Bitmask of features activated by the driver (guest)
+ * (32 bits per set) - Write Only
+ */
 #define VIRTIO_MMIO_DRIVER_FEATURES 0x020
 
 /* Activated features set selector - Write Only */
@@ -117,8 +121,10 @@
 /* Configuration atomicity value */
 #define VIRTIO_MMIO_CONFIG_GENERATION   0x0fc
 
-/* The config space is defined by each driver as
- * the per-driver configuration space - Read Write */
+/*
+ * The config space is defined by each driver as
+ * the per-driver configuration space - Read Write
+ */
 #define VIRTIO_MMIO_CONFIG      0x100
 
 /*
@@ -134,7 +140,7 @@
 
 /* Virtio loopback driver related */
 
-/* Qemu defines */
+/* QEMU defines */
 #define VIRT_MAGIC 0x74726976 /* 'virt' */
 #define VIRT_VERSION 2
 #define VIRT_VERSION_LEGACY 1
@@ -150,7 +156,8 @@
 #define PAGE_SIZE     4096
 #define EFD_INIT _IOC(_IOC_WRITE, 'k', 1, sizeof(efd_data_t))
 #define WAKEUP _IOC(_IOC_WRITE, 'k', 2, 0)
-#define START_LOOPBACK _IOC(_IOC_WRITE, 'k', 3, sizeof(virtio_device_info_struct_t))
+#define START_LOOPBACK _IOC(_IOC_WRITE, 'k', 3, \
+                            sizeof(virtio_device_info_struct_t))
 #define IRQ _IOC(_IOC_WRITE, 'k', 4, sizeof(int))
 #define SHARE_VQS _IOC(_IOC_WRITE, 'k', 5, 0)
 #define SHARE_BUF _IOC(_IOC_WRITE, 'k', 6, sizeof(uint64_t))
@@ -189,13 +196,17 @@ typedef struct VirtIOMMIOProxy {
 #define VRING_PACKED_DESC_F_AVAIL   7
 #define VRING_PACKED_DESC_F_USED    15
 
-/* The Host uses this in used->flags to advise the Guest: don't kick me when
+/*
+ * The Host uses this in used->flags to advise the Guest: don't kick me when
  * you add a buffer.  It's unreliable, so it's simply an optimization.  Guest
- * will still kick if it's out of buffers. */
+ * will still kick if it's out of buffers.
+ */
 #define VRING_USED_F_NO_NOTIFY  1
-/* The Guest uses this in avail->flags to advise the Host: don't interrupt me
+/*
+ * The Guest uses this in avail->flags to advise the Host: don't interrupt me
  * when you consume a buffer.  It's unreliable, so it's simply an
- * optimization.  */
+ * optimization.
+ */
 #define VRING_AVAIL_F_NO_INTERRUPT  1
 
 /* Enable events in packed ring. */
@@ -218,13 +229,18 @@ typedef struct VirtIOMMIOProxy {
 /* We support indirect buffer descriptors */
 #define VIRTIO_RING_F_INDIRECT_DESC 28
 
-/* The Guest publishes the used index for which it expects an interrupt
- * at the end of the avail ring. Host should ignore the avail->flags field. */
-/* The Host publishes the avail index for which it expects a kick
- * at the end of the used ring. Guest should ignore the used->flags field. */
+/*
+ * The Guest publishes the used index for which it expects an interrupt
+ * at the end of the avail ring. Host should ignore the avail->flags field.
+ */
+/*
+ * The Host publishes the avail index for which it expects a kick
+ * at the end of the used ring. Guest should ignore the used->flags field.
+ */
 #define VIRTIO_RING_F_EVENT_IDX     29
 
-/* Alignment requirements for vring elements.
+/*
+ * Alignment requirements for vring elements.
  * When using pre-virtio 1.0 layout, these fall out naturally.
  */
 #define VRING_AVAIL_ALIGN_SIZE 2
@@ -232,8 +248,7 @@ typedef struct VirtIOMMIOProxy {
 #define VRING_DESC_ALIGN_SIZE 16
 /******************/
 
-typedef struct VRing
-{
+typedef struct VRing {
     unsigned int num;
     unsigned int num_default;
     unsigned int align;
@@ -242,8 +257,7 @@ typedef struct VRing
     uint64_t used;
 } VRing;
 
-typedef struct VRingDesc
-{
+typedef struct VRingDesc {
     uint64_t addr;
     uint32_t len;
     uint16_t flags;
@@ -257,28 +271,24 @@ typedef struct VRingPackedDesc {
     uint16_t flags;
 } VRingPackedDesc;
 
-typedef struct VRingAvail
-{
+typedef struct VRingAvail {
     uint16_t flags;
     uint16_t idx;
     uint16_t ring[];
 } VRingAvail;
 
-typedef struct VRingUsedElem
-{
+typedef struct VRingUsedElem {
     uint32_t id;
     uint32_t len;
 } VRingUsedElem;
 
-typedef struct VRingUsed
-{
+typedef struct VRingUsed {
     uint16_t flags;
     uint16_t idx;
     VRingUsedElem ring[];
 } VRingUsed;
 
-typedef struct VirtQueueElement
-{
+typedef struct VirtQueueElement {
     unsigned int index;
     unsigned int len;
     unsigned int ndescs;
@@ -294,8 +304,7 @@ typedef struct VirtIODevice VirtIODevice;
 typedef struct VirtQueue VirtQueue;
 typedef void (*VirtIOHandleOutput)(VirtIODevice *, VirtQueue *);
 
-typedef struct VirtQueue
-{
+typedef struct VirtQueue {
     VRing vring;
     VirtQueueElement *used_elems;
 
@@ -330,7 +339,6 @@ typedef struct VirtQueue
     EventNotifier guest_notifier;
     EventNotifier host_notifier;
     bool host_notifier_enabled;
-    //QLIST_ENTRY(VirtQueue) node;
 } VirtQueue;
 
 typedef struct VirtIORNG VirtIORNG;
@@ -338,9 +346,7 @@ typedef struct VHostUserRNG VHostUserRNG;
 typedef struct VirtioDeviceClass VirtioDeviceClass;
 typedef struct VirtioBus VirtioBus;
 
-typedef struct VirtIODevice
-{
-    //DeviceState parent_obj;
+typedef struct VirtIODevice {
     VirtioBus *vbus;
     VirtioDeviceClass *vdev_class;
     const char *name;
@@ -356,7 +362,6 @@ typedef struct VirtIODevice
     uint32_t generation;
     int nvectors;
     VirtQueue *vq;
-    //MemoryListener listener;
     uint16_t device_id;
     bool vm_running;
     bool broken; /* device in invalid state, needs reset */
@@ -366,14 +371,11 @@ typedef struct VirtIODevice
     bool started;
     bool start_on_kick; /* when virtio 1.0 feature has not been negotiated */
     bool disable_legacy_check;
-    //VMChangeStateEntry *vmstate;
     char *bus_name;
     uint8_t device_endian;
     bool use_guest_notifier_mask;
     VirtIORNG *vrng;
     VHostUserRNG *vhrng;
-    //AddressSpace *dma_as;
-    //QLIST_HEAD(, VirtQueue) *vector_queues;
 } VirtIODevice;
 
 typedef struct efd_data {
@@ -389,14 +391,17 @@ typedef struct virtio_device_info_struct {
 
 } virtio_device_info_struct_t;
 
-/* proto */
+
+/* Negotiation structs */
+
+typedef struct { int counter; } atomic_t;
+
 typedef struct virtio_neg {
     uint64_t notification;
     uint64_t data;
     uint64_t size;
     bool read;
-    bool done;
-    bool request_op;
+    atomic_t done;
 } virtio_neg_t;
 
 
@@ -498,18 +503,21 @@ typedef struct VirtioDeviceClass {
     void (*set_config)(VirtIODevice *vdev, const uint8_t *config);
     void (*reset)(VirtIODevice *vdev);
     void (*set_status)(VirtIODevice *vdev, uint8_t val);
-    /* For transitional devices, this is a bitmap of features
+    /*
+     * For transitional devices, this is a bitmap of features
      * that are only exposed on the legacy interface but not
      * the modern one.
      */
     uint64_t legacy_features;
-    /* Test and clear event pending status.
+    /*
+     * Test and clear event pending status.
      * Should be called after unmask to avoid losing events.
      * If backend does not support masking,
      * must check in frontend instead.
      */
     bool (*guest_notifier_pending)(VirtIODevice *vdev, int n);
-    /* Mask/unmask events from this vq. Any events reported
+    /*
+     * Mask/unmask events from this vq. Any events reported
      * while masked will become pending.
      * If backend does not support masking,
      * must mask in frontend instead.
@@ -517,13 +525,15 @@ typedef struct VirtioDeviceClass {
     void (*guest_notifier_mask)(VirtIODevice *vdev, int n, bool mask);
     int (*start_ioeventfd)(VirtIODevice *vdev);
     void (*stop_ioeventfd)(VirtIODevice *vdev);
-    /* Saving and loading of a device; trying to deprecate save/load
+    /*
+     * Saving and loading of a device; trying to deprecate save/load
      * use vmsd for new devices.
      */
-    /* Post load hook in vmsd is called early while device is processed, and
-     * when VirtIODevice isn't fully initialized.  Devices should use this instead,
-     * unless they specifically want to verify the migration stream as it's
-     * processed, e.g. for bounds checking.
+    /*
+     * Post load hook in vmsd is called early while device is processed, and
+     * when VirtIODevice isn't fully initialized.  Devices should use this
+     * instead, unless they specifically want to verify the migration stream
+     * as it's processed, e.g. for bounds checking.
      */
     int (*post_load)(VirtIODevice *vdev);
     bool (*primary_unplug_pending)(void *opaque);
@@ -537,10 +547,10 @@ void handle_input(VirtIODevice *vdev, VirtQueue *vq);
 void *my_select(void *data);
 void *wait_read_write(void *data);
 void *my_notify(void *data);
-void create_rng_struct (void);
+void create_rng_struct(void);
 void print_neg_flag(uint64_t neg_flag, bool read);
-void adapter_read_write_cb (void);
-int virtio_mmio_start(void);
+void adapter_read_write_cb(void);
+int virtio_loopback_start(void);
 
 int virtio_queue_ready(VirtQueue *vq);
 void virtqueue_get_avail_bytes(VirtQueue *vq, unsigned int *in_bytes,
@@ -551,7 +561,8 @@ bool virtio_has_feature(uint64_t features, unsigned int fbit);
 
 int virtio_queue_empty(VirtQueue *vq);
 void *virtqueue_pop(VirtQueue *vq, size_t sz);
-void virtqueue_push(VirtQueue *vq, const VirtQueueElement *elem, unsigned int len);
+void virtqueue_push(VirtQueue *vq, const VirtQueueElement *elem,
+                    unsigned int len);
 size_t iov_from_buf(const struct iovec *iov, unsigned int iov_cnt,
              size_t offset, const void *buf, size_t bytes);
 bool virtqueue_get_head(VirtQueue *vq, unsigned int idx,
@@ -571,7 +582,7 @@ VirtQueue *virtio_add_queue(VirtIODevice *vdev, int queue_size,
 VirtQueue *virtio_get_queue(VirtIODevice *vdev, int n);
 void virtio_dev_init(VirtIODevice *vdev, const char *name,
                  uint16_t device_id, size_t config_size);
-void virtio_mmio_bus_init(VirtioBus *k);
+void virtio_loopback_bus_init(VirtioBus *k);
 int virtio_bus_set_host_notifier(VirtioBus *vbus, int n, bool assign);
 EventNotifier *virtio_queue_get_host_notifier(VirtQueue *vq);
 EventNotifier *virtio_queue_get_guest_notifier(VirtQueue *vq);
@@ -594,17 +605,22 @@ void virtio_notify(VirtIODevice *vdev, VirtQueue *vq);
 int virtqueue_split_read_next_desc(VirtIODevice *vdev, VRingDesc *desc,
                                    unsigned int max, unsigned int *next);
 
-/* Do we get callbacks when the ring is completely used, even if we've
- * suppressed them? */
+/*
+ * Do we get callbacks when the ring is completely used, even if we've
+ * suppressed them?
+ */
 #define VIRTIO_F_NOTIFY_ON_EMPTY         24
 #define VIRTIO_CONFIG_S_FEATURES_OK      8
 #define VIRTIO_CONFIG_S_DRIVER_OK        4
 #define VIRTIO_F_VERSION_1               32
 #define VIRTIO_F_ACCESS_PLATFORM         33
-/* Legacy name for VIRTIO_F_ACCESS_PLATFORM (for compatibility with old userspace) */
+/*
+ * Legacy name for VIRTIO_F_ACCESS_PLATFORM
+ * (for compatibility with old userspace)
+ */
 #define VIRTIO_F_IOMMU_PLATFORM          VIRTIO_F_ACCESS_PLATFORM
 
-/* Qemu Aligned functions */
+/* QEMU Aligned functions */
 /*
  * Round number down to multiple. Safe when m is not a power of 2 (see
  * ROUND_DOWN for a faster version when a power of 2 is guaranteed).

@@ -1,5 +1,5 @@
 /*
- * Based on libvhost-user.c of Qemu project
+ * Based on libvhost-user.c of QEMU project
  *
  *   Copyright IBM, Corp. 2007
  *   Copyright (c) 2016 Red Hat, Inc.
@@ -432,7 +432,8 @@ out:
 
 int vhost_user_get_vq_index(struct vhost_dev *dev, int idx)
 {
-    /* TODO: Add a assert to check the requested index
+    /*
+     * TODO: Add a assert to check the requested index
      *
      * assert(idx >= dev->vq_index && idx < dev->vq_index + (int)dev->nvqs);
      */
@@ -452,7 +453,8 @@ void vhost_user_share_fd(void)
     msg.fd_num = 1;
     memcpy(msg.fds, &loopback_fd, fd_num * sizeof(int));
 
-    /* TODO: Check if we need to remove the VHOST_USER_NEED_REPLY_MASK flag
+    /*
+     * TODO: Check if we need to remove the VHOST_USER_NEED_REPLY_MASK flag
      *
      * msg.flags &= ~VHOST_USER_NEED_REPLY_MASK;
      */
@@ -478,7 +480,8 @@ int vhost_set_vring_file(VhostUserRequest request,
         msg.payload.u64 |= VHOST_USER_VRING_NOFD_MASK;
     }
 
-    /* TODO: Check if we need to remove the VHOST_USER_NEED_REPLY_MASK flag
+    /*
+     * TODO: Check if we need to remove the VHOST_USER_NEED_REPLY_MASK flag
      *
      * msg.flags &= ~VHOST_USER_NEED_REPLY_MASK;
      */
@@ -553,7 +556,6 @@ int vhost_user_set_vring_addr(struct vhost_dev *dev,
         msg.flags |= VHOST_USER_NEED_REPLY_MASK;
     }
 
-    //ret = vhost_user_write(dev, &msg, NULL, 0);
     ret = vu_message_write(client_sock, &msg);
     if (ret < 0) {
         DBG("Fail vhost_user_set_vring_addr\n");
@@ -606,8 +608,8 @@ static int vhost_user_set_mem_table_postcopy(struct vhost_dev *dev,
     return 0;
 }
 
-
-/* TODO: This function is not yet fully optimized because in the current release
+/*
+ * TODO: This function is not yet fully optimized because in the current release
  *  it is not used. t will be implemented or deleted in a later release.
  */
 int vhost_user_set_mem_table(struct vhost_dev *dev)
@@ -667,9 +669,10 @@ int vhost_user_backend_init(struct vhost_dev *vhdev)
 
         vhdev->protocol_features =
             protocol_features & VHOST_USER_PROTOCOL_FEATURE_MASK;
-
-        /* TODO: Disable config bit for the rng, this might be usefull
-         *       when new devices are added*/
+        /*
+         * TODO: Disable config bit for the rng, this might be usefull
+         *       when new devices are added
+         */
         vhdev->protocol_features &= ~(1ULL << VHOST_USER_PROTOCOL_F_CONFIG);
 
         err = vhost_user_set_protocol_features(vhdev->protocol_features);
@@ -744,7 +747,8 @@ int vhost_user_backend_init(struct vhost_dev *vhdev)
         }
     }
 
-    /* TODO: We might need to set up a postcopy_notifier in a future release:
+    /*
+     * TODO: We might need to set up a postcopy_notifier in a future release:
      *
      * u->postcopy_notifier.notify = vhost_user_postcopy_notifier;
      * postcopy_add_notifier(&u->postcopy_notifier);
@@ -754,8 +758,8 @@ int vhost_user_backend_init(struct vhost_dev *vhdev)
 }
 
 
-void vhost_dev_init(struct vhost_dev *vhdev) {
-
+void vhost_dev_init(struct vhost_dev *vhdev)
+{
     uint64_t features;
     int r, n_initialized_vqs = 0;
     unsigned int i;
@@ -782,7 +786,8 @@ void vhost_dev_init(struct vhost_dev *vhdev) {
         }
     }
 
-    /* TODO: busyloop == 0 in rng case, but we might need it for new devices:
+    /*
+     * TODO: busyloop == 0 in rng case, but we might need it for new devices:
      *
      * if (busyloop_timeout) {
      *     for (i = 0; i < dev->nvqs; ++i) {

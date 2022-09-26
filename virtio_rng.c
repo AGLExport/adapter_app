@@ -1,7 +1,7 @@
 /*
  * A virtio device implementing a hardware random number generator.
  *
- * Based on virtio-rng.c of Qemu project
+ * Based on virtio-rng.c of QEMU project
  *  Copyright 2012 Red Hat, Inc.
  *  Copyright 2012 Amit Shah <amit.shah@redhat.com>
  *
@@ -15,7 +15,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <stdint.h>     //Definition of uint64_t
+#include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
 #include <sys/param.h>
@@ -87,7 +87,8 @@ void chr_read(VirtIORNG *vrng, const void *buf, size_t size)
 
         virtqueue_push(vrng->vq, elem, len);
 
-        /* TODO: We need tp free the elem
+        /*
+         * TODO: We need tp free the elem
          *
          * g_free(elem);
          */
@@ -95,14 +96,21 @@ void chr_read(VirtIORNG *vrng, const void *buf, size_t size)
     virtio_notify(vdev, vrng->vq);
 
     if (!virtio_queue_empty(vrng->vq)) {
-        /* If we didn't drain the queue, call virtio_rng_process
+        /*
+         * If we didn't drain the queue, call virtio_rng_process
          * to take care of asking for more data as appropriate.
          */
         virtio_rng_process(vrng);
     }
 }
 
-const char test_str[64] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63};
+const char test_str[64] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+                           10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                           20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+                           30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+                           40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+                           50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+                           60, 61, 62, 63};
 
 void virtio_rng_process(VirtIORNG *vrng)
 {
@@ -131,30 +139,30 @@ void handle_input(VirtIODevice *vdev, VirtQueue *vq)
     virtio_rng_process(vdev->vrng);
 }
 
-static void virtio_dev_class_init (VirtIODevice *vdev) {
-
-    vdev->vdev_class = (VirtioDeviceClass *) malloc(sizeof(VirtioDeviceClass));
+static void virtio_dev_class_init(VirtIODevice *vdev)
+{
+    vdev->vdev_class = (VirtioDeviceClass *)malloc(sizeof(VirtioDeviceClass));
     vdev->vdev_class->parent = vdev;
     vdev->vdev_class->set_status = virtio_rng_set_status;
 }
 
-void virtio_rng_init(VirtIODevice *vdev) {
-
-    VirtIORNG *vrng = (VirtIORNG*) malloc (sizeof(VirtIORNG));
+void virtio_rng_init(VirtIODevice *vdev)
+{
+    VirtIORNG *vrng = (VirtIORNG *)malloc(sizeof(VirtIORNG));
     vdev->vrng = vrng;
     vrng->parent_obj = vdev;
     vrng->vq = vdev->vq;
     vrng->quota_remaining = LONG_MAX;
 
     /* Prepare dev_class */
-    virtio_dev_class_init (vdev);
+    virtio_dev_class_init(vdev);
 }
 
 
-void virtio_rng_realize(void) {
-
+void virtio_rng_realize(void)
+{
     /* prepare procy and virtio dev*/
-    proxy = (VirtIOMMIOProxy*) malloc (sizeof(VirtIOMMIOProxy));
+    proxy = (VirtIOMMIOProxy *)malloc(sizeof(VirtIOMMIOProxy));
 
     virtio_dev_init(global_vdev, "virtio-rng", 4, 0);
 

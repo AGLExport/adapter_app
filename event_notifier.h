@@ -1,5 +1,5 @@
 /*
- * Based on event_notifier.h of Qemu project
+ * Based on event_notifier.h of QEMU project
  *
  *   Copyright Red Hat, Inc. 2010
  *

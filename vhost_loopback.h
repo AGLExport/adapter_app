@@ -29,6 +29,7 @@
 
 int vhost_dev_enable_notifiers(struct vhost_dev *hdev, VirtIODevice *vdev);
 int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev);
-void vhost_virtqueue_mask(struct vhost_dev *hdev, VirtIODevice *vdev, int n, bool mask);
+void vhost_virtqueue_mask(struct vhost_dev *hdev, VirtIODevice *vdev,
+                          int n, bool mask);
 
 #endif /* LOOPBACK_VHOST_H */
