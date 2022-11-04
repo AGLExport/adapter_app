@@ -70,6 +70,8 @@ int vhost_dev_enable_notifiers(struct vhost_dev *hdev, VirtIODevice *vdev)
 {
     int i, r, e;
 
+    DBG("vhost_dev_enable_notifiers(...)\n");
+
     /*
      * We will pass the notifiers to the kernel, make sure that QEMU
      * doesn't interfere.
@@ -178,6 +180,8 @@ void vhost_virtqueue_mask(struct vhost_dev *hdev, VirtIODevice *vdev, int n,
     }
 
     file.index = vhost_user_get_vq_index(hdev, n);
+    DBG("vhost_virtqueue_mask -> index: %d, n: %d, file.fd: %d\n",
+         index, n, file.fd);
 
     r = vhost_user_set_vring_call(&file);
     if (r < 0) {
@@ -193,6 +197,8 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
     VirtioBus *vbus = vdev->vbus;
     uint64_t s, l, a;
     int r;
+
+    DBG("vhost_virtqueue_start()\n");
 
     int vhost_vq_index = vhost_user_get_vq_index(dev, idx);
     struct vhost_vring_file file = {
@@ -278,6 +284,7 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
         vhost_virtqueue_mask(dev, vdev, idx, false);
     }
 
+    DBG("vhost_virtqueue_start return successfully\n");
     return 0;
 }
 
@@ -288,6 +295,8 @@ int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev)
 
     hdev->started = true;
     hdev->vdev = vdev;
+
+    DBG("vhost_dev_start()\n");
 
     r = vhost_dev_set_features(hdev, hdev->log_enabled);
     if (r < 0) {
@@ -311,6 +320,8 @@ int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev)
     /* This is used to exhange the loopback_fd to the vhost-user-device */
     vhost_user_share_fd();
 
+    DBG("hdev->nvqs: %d\n", hdev->nvqs);
+
     for (i = 0; i < hdev->nvqs; ++i) {
         r = vhost_virtqueue_start(hdev,
                                   vdev,
@@ -322,5 +333,85 @@ int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev)
         }
     }
 
+    DBG("vhost_dev_start return successfully\n");
+
     return 0;
 }
+
+
+int vhost_dev_get_config(struct vhost_dev *hdev, uint8_t *config,
+                         uint32_t config_len)
+{
+    DBG("vhost_dev_get_config(...)\n");
+
+    return vhost_user_get_config(hdev, config, config_len);
+}
+
+int vhost_dev_set_config(struct vhost_dev *hdev, const uint8_t *data,
+                         uint32_t offset, uint32_t size, uint32_t flags)
+{
+    DBG("vhost_dev_set_config(...)\n");
+    return vhost_user_set_config(hdev, data, offset, size, flags);
+
+}
+
+void vhost_dev_set_config_notifier(struct vhost_dev *hdev,
+                                   const VhostDevConfigOps *ops)
+{
+    DBG("vhost_dev_set_config_notifier(...)\n");
+    hdev->config_ops = ops;
+}
+
+int vhost_dev_prepare_inflight(struct vhost_dev *hdev, VirtIODevice *vdev)
+{
+    int r;
+
+    /*
+     * TODO: Check if we need that
+     * if (hdev->vhost_ops->vhost_get_inflight_fd == NULL ||
+     *     hdev->vhost_ops->vhost_set_inflight_fd == NULL) {
+     *     return 0;
+     * }
+     */
+
+    hdev->vdev = vdev;
+
+    r = vhost_dev_set_features(hdev, hdev->log_enabled);
+    if (r < 0) {
+        DBG("vhost_dev_prepare_inflight failed\n");
+        return r;
+    }
+
+    return 0;
+}
+
+int vhost_dev_set_inflight(struct vhost_dev *dev,
+                           struct vhost_inflight *inflight)
+{
+    int r;
+
+    if (inflight->addr) {
+        r = vhost_user_set_inflight_fd(dev, inflight);
+        if (r) {
+            DBG("vhost_set_inflight_fd failed\n");
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int vhost_dev_get_inflight(struct vhost_dev *dev, uint16_t queue_size,
+                           struct vhost_inflight *inflight)
+{
+    int r;
+
+    r = vhost_user_get_inflight_fd(dev, queue_size, inflight);
+    if (r) {
+        DBG("vhost_get_inflight_fd failed\n");
+        return -1;
+    }
+
+    return 0;
+}
+

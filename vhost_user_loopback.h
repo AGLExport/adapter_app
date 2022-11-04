@@ -59,6 +59,11 @@ struct vhost_virtqueue {
     struct vhost_dev *dev;
 };
 
+typedef struct VhostDevConfigOps {
+    /* Vhost device config space changed callback */
+    int (*vhost_dev_config_notifier)(struct vhost_dev *dev);
+} VhostDevConfigOps;
+
 struct vhost_dev {
     VirtIODevice *vdev;
     struct vhost_virtqueue *vqs;
@@ -81,6 +86,7 @@ struct vhost_dev {
     void *migration_blocker;
     /* Vhost-user struct */
     uint64_t memory_slots;
+    const VhostDevConfigOps *config_ops;
 };
 
 struct vhost_user {
@@ -798,5 +804,18 @@ int vhost_user_set_vring_base(struct vhost_dev *dev,
                               struct vhost_vring_state *ring);
 int vhost_user_set_vring_addr(struct vhost_dev *dev,
                               struct vhost_vring_addr *addr);
+int vhost_user_get_config(struct vhost_dev *dev, uint8_t *config,
+                          uint32_t config_len);
+int vhost_user_set_config(struct vhost_dev *dev, const uint8_t *data,
+                          uint32_t offset, uint32_t size, uint32_t flags);
+
+/* FIXME: This need to move in a better place */
+struct vhost_inflight;
+int vhost_user_get_inflight_fd(struct vhost_dev *dev,
+                               uint16_t queue_size,
+                               struct vhost_inflight *inflight);
+int vhost_user_set_inflight_fd(struct vhost_dev *dev,
+                               struct vhost_inflight *inflight);
+
 
 #endif /* LIBVHOST_USER_H */

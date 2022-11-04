@@ -21,7 +21,7 @@
 #CFLAGS := -Wall -Wextra -Werror
 #CFLAGS := -Wall -Wextra -Wno-unused-variable -Wno-unused-function
 CFLAGS := -Wno-unused-variable -Wno-unused-function
-CFLAGS += -DSERVER
+CFLAGS =
 CC =
 
 ifeq ($(ARCH), arm64)
@@ -33,11 +33,26 @@ endif
 
 ifeq ($(VHOST_USER_RNG), 1)
  CFLAGS += -DVHOST_USER_RNG_DEV
+ CFLAGS += -DVHOST_USER
+endif
+
+ifeq ($(VHOST_USER_BLK), 1)
+ CFLAGS += -DVHOST_USER_BLK_DEV
+ CFLAGS += -DVHOST_USER
+endif
+
+ifeq ($(VHOST_USER_INPUT), 1)
+ CFLAGS += -DVHOST_USER_INPUT_DEV
+ CFLAGS += -DVHOST_USER
+endif
+
+ifeq ($(VIRTIO_RNG), 1)
+ CFLAGS += -DVIRTIO_RNG
 endif
 
 INCL += -I .
 DEPS = adapter.h vhost_user_loopback.h event_notifier.h virtio_loopback.h
-SRC_C = event_notifier.c vhost_user_loopback.c virtio_loopback.c virtio_rng.c vhost_user_rng.c vhost_loopback.c adapter.c
+SRC_C = event_notifier.c vhost_user_loopback.c virtio_loopback.c virtio_rng.c virtio_input.c vhost_user_input.c vhost_user_blk.c vhost_user_rng.c vhost_loopback.c adapter.c
 
 OBJS = $(SRC_C:.c=.o)
 BINS = adapter

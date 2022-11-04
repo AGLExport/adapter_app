@@ -1,4 +1,6 @@
 /*
+ * Based on vhost.h of QEMU project
+ *
  * Copyright 2022 Virtual Open Systems SAS.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -31,5 +33,38 @@ int vhost_dev_enable_notifiers(struct vhost_dev *hdev, VirtIODevice *vdev);
 int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev);
 void vhost_virtqueue_mask(struct vhost_dev *hdev, VirtIODevice *vdev,
                           int n, bool mask);
+int vhost_dev_get_config(struct vhost_dev *hdev, uint8_t *config,
+                         uint32_t config_len);
+int vhost_dev_set_config(struct vhost_dev *hdev, const uint8_t *data,
+                         uint32_t offset, uint32_t size, uint32_t flags);
+/**
+ * vhost_dev_set_config_notifier() - register VhostDevConfigOps
+ * @hdev: common vhost_dev_structure
+ * @ops: notifier ops
+ *
+ * If the device is expected to change configuration a notifier can be
+ * setup to handle the case.
+ */
+
+typedef struct VhostDevConfigOps VhostDevConfigOps;
+
+void vhost_dev_set_config_notifier(struct vhost_dev *dev,
+                                   const VhostDevConfigOps *ops);
+int vhost_dev_prepare_inflight(struct vhost_dev *hdev, VirtIODevice *vdev);
+
+int vhost_dev_get_inflight(struct vhost_dev *dev, uint16_t queue_size,
+                           struct vhost_inflight *inflight);
+
+int vhost_dev_set_inflight(struct vhost_dev *dev,
+                           struct vhost_inflight *inflight);
+
+
+struct vhost_inflight {
+    int fd;
+    void *addr;
+    uint64_t size;
+    uint64_t offset;
+    uint16_t queue_size;
+};
 
 #endif /* LOOPBACK_VHOST_H */

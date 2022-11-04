@@ -49,6 +49,7 @@
 /* Project header files */
 #include "virtio_loopback.h"
 #include "vhost_user_loopback.h"
+#include "vhost_loopback.h"
 #include "event_notifier.h"
 
 #ifdef DEBUG
@@ -402,6 +403,10 @@ int vhost_setup_slave_channel(struct vhost_dev *dev)
     memcpy(msg.fds, &sv[1], sizeof(int));
     msg.fd_num = 1;
 
+
+    /* FIXME: something missing here */
+
+
     if (reply_supported) {
         msg.flags |= VHOST_USER_NEED_REPLY_MASK;
     }
@@ -497,11 +502,13 @@ int vhost_set_vring_file(VhostUserRequest request,
 
 int vhost_user_set_vring_kick(struct vhost_vring_file *file)
 {
+    DBG("Call vhost_user_set_vring_kick()\n");
     return vhost_set_vring_file(VHOST_USER_SET_VRING_KICK, file);
 }
 
 int vhost_user_set_vring_call(struct vhost_vring_file *file)
 {
+    DBG("Call vhost_user_set_vring_call()\n");
     return vhost_set_vring_file(VHOST_USER_SET_VRING_CALL, file);
 }
 
@@ -597,6 +604,214 @@ int vhost_virtqueue_init(struct vhost_dev *dev,
     return 0;
 }
 
+int vhost_user_get_config(struct vhost_dev *dev, uint8_t *config,
+                          uint32_t config_len)
+{
+    int ret;
+    VhostUserMsg msg = {
+        .request = VHOST_USER_GET_CONFIG,
+        .flags = VHOST_USER_VERSION,
+        .size = VHOST_USER_CONFIG_HDR_SIZE + config_len,
+    };
+
+    DBG("dev->protocol_features: 0x%lx\n", dev->protocol_features);
+    DBG("VHOST_USER_PROTOCOL_F_CONFIG: 0x%x\n", VHOST_USER_PROTOCOL_F_CONFIG);
+
+    if (!virtio_has_feature(dev->protocol_features,
+                VHOST_USER_PROTOCOL_F_CONFIG)) {
+        DBG("VHOST_USER_PROTOCOL_F_CONFIG not supported\n");
+        return -1;
+    }
+
+    msg.payload.config.offset = 0;
+    msg.payload.config.size = config_len;
+    ret = vu_message_write(client_sock, &msg);
+    DBG("vu_message_write return: %d\n", ret);
+    if (ret < 0) {
+        DBG("vhost_get_config failed\n");
+        return -1;
+    }
+
+    ret = vu_message_read(client_sock, &msg);
+    if (ret < 0) {
+        DBG("vhost_get_config failed\n");
+        return -1;
+    }
+
+    if (msg.request != VHOST_USER_GET_CONFIG) {
+        DBG("Received unexpected msg type. Expected %d received %d",
+            VHOST_USER_GET_CONFIG, msg.request);
+        return -1;
+    }
+
+    if (msg.size != VHOST_USER_CONFIG_HDR_SIZE + config_len) {
+        DBG("Received bad msg size.\n");
+        return -1;
+    }
+
+    memcpy(config, msg.payload.config.region, config_len);
+
+    DBG("Received config: %u, config_len: %u\n", *config, config_len);
+
+    DBG("vhost_user_get_config return successfully\n");
+
+    return 0;
+}
+
+int vhost_user_set_config(struct vhost_dev *dev, const uint8_t *data,
+                          uint32_t offset, uint32_t size, uint32_t flags)
+{
+    int ret;
+    uint8_t *p;
+    bool reply_supported = virtio_has_feature(dev->protocol_features,
+                                              VHOST_USER_PROTOCOL_F_REPLY_ACK);
+
+    VhostUserMsg msg = {
+        .request = VHOST_USER_SET_CONFIG,
+        .flags = VHOST_USER_VERSION,
+        .size = VHOST_USER_CONFIG_HDR_SIZE + size,
+    };
+
+    if (!virtio_has_feature(dev->protocol_features,
+                VHOST_USER_PROTOCOL_F_CONFIG)) {
+        DBG("VHOST_USER_PROTOCOL_F_CONFIG not supported\n");
+        return -ENOTSUP;
+    }
+
+    if (reply_supported) {
+        msg.flags |= VHOST_USER_NEED_REPLY_MASK;
+    }
+
+    if (size > VHOST_USER_MAX_CONFIG_SIZE) {
+        return -EINVAL;
+    }
+
+    msg.payload.config.offset = offset,
+    msg.payload.config.size = size,
+    msg.payload.config.flags = flags,
+    p = msg.payload.config.region;
+    memcpy(p, data, size);
+
+    ret = vu_message_write(client_sock, &msg);
+    DBG("vu_message_write return: %d\n", ret);
+    if (ret < 0) {
+        return ret;
+    }
+
+    if (reply_supported) {
+        return process_message_reply(&msg);
+        DBG("Reply is done!\n");
+    }
+
+    return 0;
+}
+
+
+int vhost_user_get_inflight_fd(struct vhost_dev *dev,
+                               uint16_t queue_size,
+                               struct vhost_inflight *inflight)
+{
+    void *addr;
+    int fd;
+    int ret;
+    VhostUserMsg msg = {
+        .request = VHOST_USER_GET_INFLIGHT_FD,
+        .flags = VHOST_USER_VERSION,
+        .payload.inflight.num_queues = dev->nvqs,
+        .payload.inflight.queue_size = queue_size,
+        .size = sizeof(msg.payload.inflight),
+    };
+
+    DBG("vhost_user_get_inflight_fd\n");
+
+    if (!virtio_has_feature(dev->protocol_features,
+                            VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD)) {
+        return 0;
+    }
+
+    /* NOTE: This stays here as a reference */
+    ret = vu_message_write(client_sock, &msg);
+    if (ret < 0) {
+        DBG("vhost_user_get_inflight_fd\n\t->write error\n");
+        return ret;
+    }
+
+    /* NOTE: This stays here as a reference */
+    ret = vu_message_read(client_sock, &msg);
+    if (ret < 0) {
+        DBG("vhost_user_get_inflight_fd\n\t->read error\n");
+        return ret;
+    }
+
+    if (msg.request != VHOST_USER_GET_INFLIGHT_FD) {
+        DBG("Received unexpected msg type. "
+            "Expected %d received %d\n",
+            VHOST_USER_GET_INFLIGHT_FD, msg.request);
+        return -1;
+    }
+
+    if (msg.size != sizeof(msg.payload.inflight)) {
+        DBG("Received bad msg size.\n");
+        return -1;
+    }
+
+    if (!msg.payload.inflight.mmap_size) {
+        DBG("!msg.payload.inflight.mmap_size\n");
+        return 0;
+    }
+
+    /* FIXME: This needs to be checked */
+    memcpy(&fd, msg.fds, sizeof(int));
+    if (fd < 0) {
+        DBG("Failed to get mem fd\n");
+        return -1;
+    }
+
+    addr = mmap(0, msg.payload.inflight.mmap_size, PROT_READ | PROT_WRITE,
+                MAP_SHARED, fd, msg.payload.inflight.mmap_offset);
+
+    if (addr == MAP_FAILED) {
+        DBG("Failed to mmap mem fd\n");
+        close(fd);
+        return -1;
+    }
+
+    inflight->addr = addr;
+    inflight->fd = fd;
+    inflight->size = msg.payload.inflight.mmap_size;
+    inflight->offset = msg.payload.inflight.mmap_offset;
+    inflight->queue_size = queue_size;
+
+    return 0;
+}
+
+
+int vhost_user_set_inflight_fd(struct vhost_dev *dev,
+                               struct vhost_inflight *inflight)
+{
+    VhostUserMsg msg = {
+        .request = VHOST_USER_SET_INFLIGHT_FD,
+        .flags = VHOST_USER_VERSION,
+        .payload.inflight.mmap_size = inflight->size,
+        .payload.inflight.mmap_offset = inflight->offset,
+        .payload.inflight.num_queues = dev->nvqs,
+        .payload.inflight.queue_size = inflight->queue_size,
+        .size = sizeof(msg.payload.inflight),
+    };
+
+    DBG("vhost_user_set_inflight_fd\n");
+
+    if (!virtio_has_feature(dev->protocol_features,
+                            VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD)) {
+        return 0;
+    }
+
+    msg.fd_num = 1;
+    memcpy(msg.fds, &inflight->fd, msg.fd_num * sizeof(int));
+
+    return !vu_message_write(client_sock, &msg); /* Returns true or false*/
+}
+
 
 /* -------------------- Vring functions -------------------- */
 
@@ -651,6 +866,8 @@ int vhost_user_backend_init(struct vhost_dev *vhdev)
     uint64_t features, protocol_features, ram_slots;
     int err;
 
+    DBG("vhost_user_backend_init(...)\n");
+
     err = vhost_user_get_features(&features);
     if (err < 0) {
         DBG("vhost_backend_init failed\n");
@@ -669,11 +886,28 @@ int vhost_user_backend_init(struct vhost_dev *vhdev)
 
         vhdev->protocol_features =
             protocol_features & VHOST_USER_PROTOCOL_FEATURE_MASK;
+
         /*
-         * TODO: Disable config bit for the rng, this might be usefull
-         *       when new devices are added
+         * FIXME: Disable VHOST_USER_PROTOCOL_F_SLAVE_REQ for the moment
+         * vhdev->protocol_features &=
+         *         ~(1ULL << VHOST_USER_PROTOCOL_F_SLAVE_REQ);
          */
-        vhdev->protocol_features &= ~(1ULL << VHOST_USER_PROTOCOL_F_CONFIG);
+
+        /* FIXME: Disable VHOST_USER_GET_INFLIGHT_FD for the moment */
+        vhdev->protocol_features &=
+                ~(1ULL << VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD);
+
+        if (!vhdev->config_ops ||
+                !vhdev->config_ops->vhost_dev_config_notifier) {
+            /* Don't acknowledge CONFIG feature if device doesn't support it */
+            dev->protocol_features &= ~(1ULL << VHOST_USER_PROTOCOL_F_CONFIG);
+        } else if (!(protocol_features &
+                    (1ULL << VHOST_USER_PROTOCOL_F_CONFIG))) {
+            DBG("Device expects VHOST_USER_PROTOCOL_F_CONFIG "
+                "but backend does not support it.\n");
+            return -EINVAL;
+        }
+
 
         err = vhost_user_set_protocol_features(vhdev->protocol_features);
         if (err < 0) {
@@ -764,6 +998,8 @@ void vhost_dev_init(struct vhost_dev *vhdev)
     int r, n_initialized_vqs = 0;
     unsigned int i;
 
+    DBG("vhost_dev_init(...)\n");
+
     /* Vhost conf */
     vhdev->migration_blocker = NULL;
 
@@ -778,6 +1014,8 @@ void vhost_dev_init(struct vhost_dev *vhdev)
     if (r < 0) {
         DBG("vhost_get_features failed\n");
     }
+    DBG("Print vhost_dev_init->features: 0x%lx\n", features);
+
 
     for (i = 0; i < vhdev->nvqs; ++i, ++n_initialized_vqs) {
         r = vhost_virtqueue_init(vhdev, vhdev->vqs + i, vhdev->vq_index + i);
@@ -795,7 +1033,7 @@ void vhost_dev_init(struct vhost_dev *vhdev)
      *                                                  busyloop_timeout);
      *         if (r < 0) {
      *             DBG("Failed to set busyloop timeout\n");
-     *             //goto fail_busyloop;
+     *             return -1;
      *         }
      *     }
      * }

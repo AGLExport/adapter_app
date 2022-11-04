@@ -31,6 +31,8 @@
 
 #include "event_notifier.h"
 
+#define sizeof_field(type, field) sizeof(((type *)0)->field)
+
 /* Magic value ("virt" string) - Read Only */
 #define VIRTIO_MMIO_MAGIC_VALUE     0x000
 
@@ -163,6 +165,7 @@
 #define SHARE_BUF _IOC(_IOC_WRITE, 'k', 6, sizeof(uint64_t))
 #define USED_INFO _IOC(_IOC_WRITE, 'k', 7, 0)
 #define DATA_INFO _IOC(_IOC_WRITE, 'k', 8, 0)
+#define MAP_BLK _IOC(_IOC_WRITE, 'k', 9, 0)
 
 #define VIRTIO_PCI_VRING_ALIGN         4096
 
@@ -342,8 +345,11 @@ typedef struct VirtQueue {
 } VirtQueue;
 
 typedef struct VirtIORNG VirtIORNG;
+typedef struct VirtIOInput VirtIOInput;
 typedef struct VHostUserRNG VHostUserRNG;
 typedef struct VirtioDeviceClass VirtioDeviceClass;
+typedef struct VHostUserBlk VHostUserBlk;
+typedef struct VhostUserInput VhostUserInput;
 typedef struct VirtioBus VirtioBus;
 
 typedef struct VirtIODevice {
@@ -362,6 +368,7 @@ typedef struct VirtIODevice {
     uint32_t generation;
     int nvectors;
     VirtQueue *vq;
+    VirtQueue **vqs;
     uint16_t device_id;
     bool vm_running;
     bool broken; /* device in invalid state, needs reset */
@@ -375,7 +382,10 @@ typedef struct VirtIODevice {
     uint8_t device_endian;
     bool use_guest_notifier_mask;
     VirtIORNG *vrng;
+    VirtIOInput *vinput;
     VHostUserRNG *vhrng;
+    VHostUserBlk *vhublk;
+    VhostUserInput *vhuinput;
 } VirtIODevice;
 
 typedef struct efd_data {
@@ -503,6 +513,8 @@ typedef struct VirtioDeviceClass {
     void (*set_config)(VirtIODevice *vdev, const uint8_t *config);
     void (*reset)(VirtIODevice *vdev);
     void (*set_status)(VirtIODevice *vdev, uint8_t val);
+    void (*realize)(void);
+    void (*unrealize)(VirtIODevice *vdev);
     /*
      * For transitional devices, this is a bitmap of features
      * that are only exposed on the legacy interface but not
@@ -537,6 +549,7 @@ typedef struct VirtioDeviceClass {
      */
     int (*post_load)(VirtIODevice *vdev);
     bool (*primary_unplug_pending)(void *opaque);
+    struct vhost_dev *(*get_vhost)(VirtIODevice *vdev);
 } VirtioDeviceClass;
 
 /* Global variables */
@@ -546,7 +559,7 @@ extern int loopback_fd;
 void handle_input(VirtIODevice *vdev, VirtQueue *vq);
 void *my_select(void *data);
 void *wait_read_write(void *data);
-void *my_notify(void *data);
+void virtio_notify_config(VirtIODevice *vdev);
 void create_rng_struct(void);
 void print_neg_flag(uint64_t neg_flag, bool read);
 void adapter_read_write_cb(void);
@@ -558,6 +571,7 @@ void virtqueue_get_avail_bytes(VirtQueue *vq, unsigned int *in_bytes,
                                unsigned max_in_bytes, unsigned max_out_bytes);
 void virtio_add_feature(uint64_t *features, unsigned int fbit);
 bool virtio_has_feature(uint64_t features, unsigned int fbit);
+bool virtio_device_started(VirtIODevice *vdev, uint8_t status);
 
 int virtio_queue_empty(VirtQueue *vq);
 void *virtqueue_pop(VirtQueue *vq, size_t sz);
@@ -604,6 +618,7 @@ void event_notifier_set_handler(EventNotifier *e,
 void virtio_notify(VirtIODevice *vdev, VirtQueue *vq);
 int virtqueue_split_read_next_desc(VirtIODevice *vdev, VRingDesc *desc,
                                    unsigned int max, unsigned int *next);
+void print_config(uint8_t *config);
 
 /*
  * Do we get callbacks when the ring is completely used, even if we've
@@ -618,7 +633,7 @@ int virtqueue_split_read_next_desc(VirtIODevice *vdev, VRingDesc *desc,
  * Legacy name for VIRTIO_F_ACCESS_PLATFORM
  * (for compatibility with old userspace)
  */
-#define VIRTIO_F_IOMMU_PLATFORM          VIRTIO_F_ACCESS_PLATFORM
+#define VIRTIO_F_IOMMU_PLATFORM          33
 
 /* QEMU Aligned functions */
 /*

@@ -44,6 +44,16 @@
 #include "vhost_user_loopback.h"
 #include "virtio_rng.h"
 #include "vhost_user_rng.h"
+#include "vhost_user_blk.h"
+#include "vhost_user_input.h"
+
+
+#ifdef DEBUG
+#define DBG(...) printf("adapter: " __VA_ARGS__)
+#else
+#define DBG(...)
+#endif /* DEBUG */
+
 
 /* Global variables */
 int client_sock;
@@ -54,6 +64,9 @@ struct vhost_user *vudev;
 
 void vhost_user_adapter_init(void)
 {
+
+    DBG("Setup adapter data structures\n");
+
     /* Init vhost-user device */
     vudev = (struct vhost_user *)malloc(sizeof(struct vhost_user));
 
@@ -85,6 +98,8 @@ void client(char *sock_path)
     int rc, len;
     struct sockaddr_un client_sockaddr;
 
+    DBG("Create shared socket with vhost-user-device\n");
+
     /* Initialize the struct to zero */
     memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
 
@@ -93,7 +108,7 @@ void client(char *sock_path)
      */
     client_sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (client_sock == -1) {
-        printf("SOCKET ERROR\n");
+        DBG("SOCKET ERROR\n");
         exit(1);
     }
 
@@ -107,7 +122,7 @@ void client(char *sock_path)
     len = sizeof(client_sockaddr);
     rc = connect(client_sock, (struct sockaddr *) &client_sockaddr, len);
     if (rc == -1) {
-        printf("CONNECT ERROR\n");
+        DBG("CONNECT ERROR\n");
         close(client_sock);
         exit(1);
     }
@@ -121,7 +136,7 @@ static void help_args(void)
 
 int main(int argc, char **argv)
 {
-#ifdef VHOST_USER_RNG_DEV
+#ifdef VHOST_USER
     /*
      * Check if the user has provided a socket path.
      * If not, print the help messages.
@@ -140,14 +155,37 @@ int main(int argc, char **argv)
     /* Initialize the adapter data structures */
     vhost_user_adapter_init();
 
+
     /* Initialize the virtio/vhost-user device */
+#ifdef VHOST_USER
+
+#ifdef VHOST_USER_INPUT_DEV
+    vhost_user_input_init(global_vdev); /* <-- Enable that for vhost-user-rng */
+    virtio_input_device_realize();
+#endif /* VHOST_USER_INPUT_DEV */
+
+#ifdef VHOST_USER_BLK_DEV
+    vhost_user_blk_realize(); /* <-- Enable that for vhost-user-blk */
+#endif /* VHOST_USER_BLK_DEV */
+
 #ifdef VHOST_USER_RNG_DEV
     vhost_user_rng_realize(); /* <-- Enable that for vhost-user-rng */
-#else
-    virtio_rng_realize(); /* <-- Enable that for simple rng */
-#endif
+#endif /* VHOST_USER_RNG_DEV */
 
-    /* Start loopback trasnport layer and communiation with the loopback driver */
+#else /* VHOST_USER */
+
+#ifdef VIRTIO_RNG
+    virtio_rng_realize(); /* <-- Enable that for simple rng */
+#else /* VIRTIO_RNG */
+    DBG("You have not defined any device\n");
+    exit(1);
+#endif /* VIRTIO_RNG */
+
+#endif /* VHOST_USER */
+
+    /*
+     * Start loopback trasnport layer and communiation with the loopback driver
+     */
     virtio_loopback_start();
 
     return 0;

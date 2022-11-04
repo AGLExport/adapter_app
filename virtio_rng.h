@@ -16,17 +16,14 @@
  * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
-#ifndef VIRTIO_RNG
-#define VIRTIO_RNG
+#ifndef VIRTIO_RNG_DEV
+#define VIRTIO_RNG_DEV
 
 #include "virtio_loopback.h"
 
 extern const char test_str[64];
 
-typedef void RngBackend;
-
 typedef struct VirtIORNGConf {
-    RngBackend *rng;
     uint64_t max_bytes;
     uint32_t period_ms;
 } VirtIORNGConf;
@@ -37,7 +34,6 @@ typedef struct VirtIORNG {
     /* Only one vq - guest puts buffer(s) on it when it needs entropy */
     VirtQueue *vq;
     VirtIORNGConf conf;
-    RngBackend *rng;
 
     /*
      * We purposefully don't migrate this state.  The quota will reset on the
