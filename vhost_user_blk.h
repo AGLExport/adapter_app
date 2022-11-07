@@ -46,6 +46,7 @@ struct VHostUserBlk {
     uint16_t num_queues;
     uint32_t queue_size;
     /* uint32_t config_wce; //We will need it for the next release */
+    uint32_t config_wce;
     struct vhost_inflight *inflight;
     struct vhost_virtqueue *vhost_vqs;
     struct virtio_blk_config blkcfg;

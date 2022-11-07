@@ -71,10 +71,10 @@
 
 /* Global variables */
 
+int s; /* To be deleted */
 int efd; /* Eventfd file descriptor */
 uint64_t eftd_ctr;
 fd_set rfds;
-int s;
 int fd;
 int loopback_fd;
 
@@ -145,6 +145,8 @@ int virtio_set_status(VirtIODevice *vdev, uint8_t val)
         (val & VIRTIO_CONFIG_S_DRIVER_OK)) {
         virtio_set_started(vdev, val & VIRTIO_CONFIG_S_DRIVER_OK);
     }
+
+    DBG("set vdev->status :%u \n", vdev->status);
 
     if (k->set_status) {
         DBG("k->set_status\n");
@@ -407,6 +409,8 @@ void virtio_set_isr(VirtIODevice *vdev, int value)
     if ((old & value) != value) {
         vdev->isr |= value;
     }
+
+    DBG("Update isr: %d\n", vdev->isr);
 }
 
 static void virtio_irq(VirtQueue *vq)
@@ -439,6 +443,7 @@ void virtio_notify(VirtIODevice *vdev, VirtQueue *vq)
         DBG("Do not notify!\n");
         return;
     }
+    DBG("Go on and notify!\n");
 
     virtio_irq(vq);
 }
@@ -749,6 +754,44 @@ bool virtqueue_get_head(VirtQueue *vq, unsigned int idx,
     return true;
 }
 
+uint32_t get_vqs_max_size(VirtIODevice *vdev)
+{
+    uint32_t vq_max_size = VIRTQUEUE_MAX_SIZE;
+    uint32_t total_size, temp_size, total_p2 = 1;
+    int i, log_res = 0;
+
+    total_size = VIRTQUEUE_MAX_SIZE * sizeof(VRingDesc);
+    total_size += offsetof(VRingAvail, ring) +
+                   VIRTQUEUE_MAX_SIZE * sizeof(uint16_t);
+    total_size += offsetof(VRingUsed, ring) +
+                   VIRTQUEUE_MAX_SIZE * sizeof(uint16_t);
+
+    temp_size = total_size;
+
+    /* Compute log2 of total_size (Needs to be power of 2) */
+    while ((temp_size /= 2) > 0) {
+        log_res++;
+        total_p2 *= 2;
+    }
+
+    /* if total_size is not a power of 2: (total_size > 8) -> 16 */
+    if (total_size > total_p2) {
+        total_size = 2 * total_p2;
+    }
+
+    /*
+     * Align to page size:  This needed only in case total_size
+     * is less than 4096 (PAGE_SIZE)
+     */
+    if (total_size % PAGE_SIZE > 0) {
+        total_size = (total_size / PAGE_SIZE) * PAGE_SIZE + PAGE_SIZE;
+    }
+
+    DBG("Total vqs size to mmap is: %u\n", total_size);
+
+    return total_size;
+}
+
 int virtqueue_num_heads(VirtQueue *vq, unsigned int idx)
 {
     uint16_t num_heads = vring_avail_idx(vq) - idx;
@@ -1037,6 +1080,8 @@ static void virtio_queue_guest_notifier_read(EventNotifier *n)
 
 int vhost_user_loopback_eventfd = 0;
 
+int eventfd_count = 0;
+
 void *loopback_event_select(void *wfd)
 {
     int retval;
@@ -1066,7 +1111,10 @@ void *loopback_event_select(void *wfd)
                 exit(1);
             } else {
                 DBG("\n\nEvent has come from the vhost-user-device "
-                    "(eventfd: %d)\n\n", *(int *)wfd);
+                    "(eventfd: %d) -> event_count: %d\n\n",
+                                        *(int *)wfd, eventfd_count);
+
+                eventfd_count++;
                 virtio_irq(global_vdev->vq);
             }
 
@@ -1243,6 +1291,17 @@ bool virtio_device_disabled(VirtIODevice *vdev)
 
 int prev_level = 0;
 
+void *my_notify(void *data) {
+
+    int irq_num = 44;
+    (void) data;
+    (void) ioctl(fd, IRQ, &irq_num);
+
+    pthread_exit(NULL);
+}
+
+int int_count = 0;
+
 void virtio_loopback_update_irq(VirtIODevice *vdev)
 {
     int level, irq_num = 44;
@@ -1254,6 +1313,9 @@ void virtio_loopback_update_irq(VirtIODevice *vdev)
 
     level = (vdev->isr != 0);
 
+    DBG("level: %d\n", level);
+    DBG("prev_level: %d\n", prev_level);
+
     if (!((level == 1) && (prev_level == 0))) {
         prev_level = level;
         return;
@@ -1261,9 +1323,13 @@ void virtio_loopback_update_irq(VirtIODevice *vdev)
     prev_level = level;
 
     DBG("Trigger interrupt (ioctl)\n");
-    ioctl(fd, IRQ, &irq_num);
+    DBG("Interrupt counter: %d\n", int_count++);
+
+    (void)pthread_create(&my_thread_id, NULL, my_notify, NULL);
+
 }
 
+bool enable_virtio_interrupt = false;
 
 /* virtio device */
 void virtio_notify_vector(VirtIODevice *vdev)
@@ -1296,15 +1362,26 @@ void virtio_queue_notify(VirtIODevice *vdev, int n)
 {
     VirtQueue *vq = &vdev->vq[n];
 
-    DBG("virtio_queue_notify(...)\n");
+    DBG("virtio_queue_notify(..., vq_n: %d)\n", n);
 
     if (!vq->vring.desc || vdev->broken) {
+        DBG("virtio_queue_notify: broken\n");
         return;
     }
 
+    /* Update mem_table before each notification */
+    if (vdev->vdev_class->update_mem_table) {
+        vdev->vdev_class->update_mem_table(vdev);
+    }
+
+    enable_virtio_interrupt = true;
+    virtio_set_isr(vq->vdev, 0x1);
+
     if (vq->host_notifier_enabled) {
+        DBG("vq->host_notifier_enabled\n");
         event_notifier_set(&vq->host_notifier);
     } else if (vq->handle_output) {
+        DBG("vq->handle_output\n");
         vq->handle_output(vdev, vq);
 
         if (vdev->start_on_kick) {
@@ -1569,6 +1646,8 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
     return 0;
 }
 
+uint64_t vring_phys_addrs[2] = {0};
+uint32_t vring_phys_addrs_idx = 0;
 
 void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
                        uint64_t value, unsigned size)
@@ -1688,9 +1767,14 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         if (value == 0) {
             /* TODO: To be implemented */
         } else {
-            (void)value;
+
+            DBG("desc_addr: 0x%lx\n", value);
+            vring_phys_addrs[vring_phys_addrs_idx++] = value;
+
             uint64_t desc_addr;
-            desc_addr = (uint64_t)mmap(NULL, 10 * PAGE_SIZE,
+            uint32_t vqs_size = get_vqs_max_size(global_vdev);
+
+            desc_addr = (uint64_t)mmap(NULL, vqs_size,
                                        PROT_READ | PROT_WRITE,
                                        MAP_SHARED, fd, 0);
 
@@ -1732,6 +1816,8 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         }
 
         virtio_set_status(vdev, value & 0xff);
+
+        DBG("STATUS -> %ld\n", value);
 
         /*
          * TODO: Check if this is still needed
@@ -1843,7 +1929,6 @@ void *driver_event_select(void *data)
     (void) data;
 
     DBG("\nWaiting for loopback read/write events\n");
-    fflush(stdout);
 
     FD_ZERO(&rfds);
     FD_SET(efd, &rfds);
@@ -2020,9 +2105,6 @@ int virtio_loopback_start(void)
     if (ret != 0) {
         exit(1);
     }
-
-    /* Fille the device info */
-    create_rng_struct();
 
     /* Start loopback transport */
     (void)ioctl(fd, START_LOOPBACK, &device_info);

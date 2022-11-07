@@ -70,8 +70,6 @@ int vhost_dev_enable_notifiers(struct vhost_dev *hdev, VirtIODevice *vdev)
 {
     int i, r, e;
 
-    DBG("vhost_dev_enable_notifiers(...)\n");
-
     /*
      * We will pass the notifiers to the kernel, make sure that QEMU
      * doesn't interfere.
@@ -83,6 +81,7 @@ int vhost_dev_enable_notifiers(struct vhost_dev *hdev, VirtIODevice *vdev)
         DBG("binding does not support host notifiers\n");
         goto fail;
     }
+
 
     for (i = 0; i < hdev->nvqs; ++i) {
         r = virtio_bus_set_host_notifier(vdev->vbus, hdev->vq_index + i,
@@ -149,9 +148,11 @@ static int vhost_virtqueue_set_addr(struct vhost_dev *dev,
 
     memset(&addr, 0, sizeof(struct vhost_vring_addr));
 
-    addr.desc_user_addr = (uint64_t)(unsigned long)vq->desc;
-    addr.avail_user_addr = (uint64_t)(unsigned long)vq->avail;
-    addr.used_user_addr = (uint64_t)(unsigned long)vq->used;
+    addr.desc_user_addr = 0;
+    addr.avail_user_addr = (uint64_t)((unsigned long)vq->avail -
+                                            (unsigned long)vq->desc);
+    addr.used_user_addr = (uint64_t)((unsigned long)vq->used -
+                                            (unsigned long)vq->desc);
 
     addr.index = idx;
     addr.log_guest_addr = vq->used_phys;
@@ -180,8 +181,6 @@ void vhost_virtqueue_mask(struct vhost_dev *hdev, VirtIODevice *vdev, int n,
     }
 
     file.index = vhost_user_get_vq_index(hdev, n);
-    DBG("vhost_virtqueue_mask -> index: %d, n: %d, file.fd: %d\n",
-         index, n, file.fd);
 
     r = vhost_user_set_vring_call(&file);
     if (r < 0) {
@@ -197,8 +196,6 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
     VirtioBus *vbus = vdev->vbus;
     uint64_t s, l, a;
     int r;
-
-    DBG("vhost_virtqueue_start()\n");
 
     int vhost_vq_index = vhost_user_get_vq_index(dev, idx);
     struct vhost_vring_file file = {
@@ -250,7 +247,6 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
 
     vq->used_size = s = l = virtio_queue_get_used_size(vdev, idx);
     vq->used_phys = a = virtio_queue_get_used_addr(vdev, idx);
-    DBG("vdev->vq[n].vring.used: 0x%lx\n", a);
     vq->used = (void *)a;
     if (!vq->used || l != s) {
         DBG("Error : vq->used = a\n");
@@ -263,6 +259,10 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
         DBG("Fail vhost_virtqueue_set_addr\n");
         return r;
     }
+
+    /* The next line has to be disable for rng */
+    /* Clear and discard previous events if any. */
+    event_notifier_test_and_clear(virtio_queue_get_host_notifier(vvq));
 
     file.fd = event_notifier_get_fd(virtio_queue_get_host_notifier(vvq));
     r = vhost_user_set_vring_kick(&file);
@@ -288,6 +288,14 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
     return 0;
 }
 
+void update_mem_table(VirtIODevice *vdev)
+{
+    print_mem_table(vdev->vhdev);
+    vhost_commit_vqs(vdev->vhdev);
+    print_mem_table(vdev->vhdev);
+    (void)vhost_user_set_mem_table(vdev->vhdev);
+}
+
 /* Host notifiers must be enabled at this point. */
 int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev)
 {
@@ -295,8 +303,6 @@ int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev)
 
     hdev->started = true;
     hdev->vdev = vdev;
-
-    DBG("vhost_dev_start()\n");
 
     r = vhost_dev_set_features(hdev, hdev->log_enabled);
     if (r < 0) {
@@ -308,19 +314,16 @@ int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev)
         DBG("memory_listener_register?\n");
     }
 
-    /* TODO: We might need this function in the next release */
-    /*
-     * r = vhost_user_set_mem_table(hdev);
-     * if (r < 0) {
-     *     DBG("vhost_set_mem_table failed\n");
-     *     return r;
-     * }
-     */
+    vhost_commit_init_vqs(hdev);
+
+    r = vhost_user_set_mem_table(hdev);
+    if (r < 0) {
+        DBG("vhost_set_mem_table failed\n");
+        exit(1);
+    }
 
     /* This is used to exhange the loopback_fd to the vhost-user-device */
     vhost_user_share_fd();
-
-    DBG("hdev->nvqs: %d\n", hdev->nvqs);
 
     for (i = 0; i < hdev->nvqs; ++i) {
         r = vhost_virtqueue_start(hdev,
@@ -333,8 +336,6 @@ int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev)
         }
     }
 
-    DBG("vhost_dev_start return successfully\n");
-
     return 0;
 }
 
@@ -342,23 +343,18 @@ int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev)
 int vhost_dev_get_config(struct vhost_dev *hdev, uint8_t *config,
                          uint32_t config_len)
 {
-    DBG("vhost_dev_get_config(...)\n");
-
     return vhost_user_get_config(hdev, config, config_len);
 }
 
 int vhost_dev_set_config(struct vhost_dev *hdev, const uint8_t *data,
                          uint32_t offset, uint32_t size, uint32_t flags)
 {
-    DBG("vhost_dev_set_config(...)\n");
     return vhost_user_set_config(hdev, data, offset, size, flags);
-
 }
 
 void vhost_dev_set_config_notifier(struct vhost_dev *hdev,
                                    const VhostDevConfigOps *ops)
 {
-    DBG("vhost_dev_set_config_notifier(...)\n");
     hdev->config_ops = ops;
 }
 

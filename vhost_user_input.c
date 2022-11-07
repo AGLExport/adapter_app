@@ -106,6 +106,7 @@ static void vhost_input_class_init(VirtIODevice *vdev)
     vdev->vhuinput->vdev_input->input_class->realize = vhost_user_input_realize;
     vdev->vhuinput->vdev_input->input_class->change_active =
                                             vhost_input_change_active;
+    vdev->vdev_class->update_mem_table = update_mem_table;
 }
 
 
@@ -123,6 +124,7 @@ void vhost_user_input_init(VirtIODevice *vdev)
     vdev->vinput->input_class = input_class;
 
     vdev->vhuinput = vhuinput;
+    vdev->nvqs = &dev->nvqs;
     vhuinput->vdev = vdev;
     vhuinput->vhost_dev = dev;
     vhuinput->vdev_input = vinput;
@@ -157,6 +159,9 @@ void vhost_user_input_realize()
     global_vdev->vhuinput->vhost_dev->backend_features = 0;
     global_vdev->vhuinput->vhost_dev->num_queues = nvqs;
 
+
+    global_vdev->vq = (struct VirtQueue *)malloc(
+                                     sizeof(struct VirtQueue) * nvqs);
 
     global_vdev->vhuinput->vhost_dev->nvqs = nvqs;
     global_vdev->vhuinput->vhost_dev->vqs = (struct vhost_virtqueue *)malloc(

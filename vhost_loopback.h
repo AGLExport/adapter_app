@@ -58,6 +58,8 @@ int vhost_dev_get_inflight(struct vhost_dev *dev, uint16_t queue_size,
 int vhost_dev_set_inflight(struct vhost_dev *dev,
                            struct vhost_inflight *inflight);
 
+void update_mem_table(VirtIODevice *vdev);
+
 
 struct vhost_inflight {
     int fd;

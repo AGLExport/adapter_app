@@ -175,6 +175,8 @@ static void virtio_input_set_status(VirtIODevice *vdev, uint8_t val)
     VirtIOInput *vinput = vdev->vinput;
     bool should_start = virtio_device_started(vdev, val);
 
+    DBG("virtio_input_set_status(...): %u\n", val);
+
     if (should_start) {
         if (!vinput->active) {
             vinput->active = true;
@@ -252,7 +254,7 @@ void virtio_input_device_realize()
 
     /* FIXME: do we need that? */
     memcpy(global_vdev->vq, vinput->evt, sizeof(VirtQueue));
-    memcpy(global_vdev->vq, vinput->sts, sizeof(VirtQueue));
+    memcpy(&global_vdev->vq[1], vinput->sts, sizeof(VirtQueue));
 
     DBG("global_vdev->guest_features: 0x%lx\n", global_vdev->guest_features);
 }
