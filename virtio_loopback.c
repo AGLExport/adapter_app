@@ -73,6 +73,7 @@
 
 int s; /* To be deleted */
 int efd; /* Eventfd file descriptor */
+int efd_notify; /* Eventfd file descriptor */
 uint64_t eftd_ctr;
 fd_set rfds;
 int fd;
@@ -1076,50 +1077,52 @@ int virtio_set_features(VirtIODevice *vdev, uint64_t val)
 /* TODO: MMIO notifiers -- This might not be needed anymore  */
 static void virtio_queue_guest_notifier_read(EventNotifier *n)
 {
+    VirtQueue *vq = container_of(n, VirtQueue, guest_notifier);
+    if (event_notifier_test_and_clear(n)) {
+        virtio_irq(vq);
+    }
 }
 
-int vhost_user_loopback_eventfd = 0;
 
 int eventfd_count = 0;
 
-void *loopback_event_select(void *wfd)
+
+
+
+void *loopback_event_select(void *_e)
 {
     int retval;
     uint64_t eftd_ctr;
     fd_set rfds;
     int s;
+    EventNotifier *e = (EventNotifier *)_e;
+    int rfd = e->rfd;
+    VirtQueue *vq = container_of(e, VirtQueue, guest_notifier);
 
     DBG("\nWaiting event from vhost-user-device\n");
-    fflush(stdout);
 
     FD_ZERO(&rfds);
-    FD_SET(*(int *)wfd, &rfds);
+    FD_SET(rfd, &rfds);
 
     while (1) {
 
-        retval = select(vhost_user_loopback_eventfd + 1,
-                        &rfds, NULL, NULL, NULL);
+        retval = select(rfd + 1, &rfds, NULL, NULL, NULL);
 
         if (retval == -1) {
-            DBG("\nselect() error. Exiting...");
-            exit(EXIT_FAILURE);
-        } else if (retval > 0) {
+            DBG("select() error. Exiting...\n");
+            exit(1);
+        }
+        if (retval > 0) {
 
-            s = read(*(int *)wfd, &eftd_ctr, sizeof(uint64_t));
-            if (s != sizeof(uint64_t)) {
-                DBG("\neventfd read error. Exiting...");
-                exit(1);
-            } else {
-                DBG("\n\nEvent has come from the vhost-user-device "
-                    "(eventfd: %d) -> event_count: %d\n\n",
-                                        *(int *)wfd, eventfd_count);
+            DBG("\n\nEvent has come from the vhost-user-device "
+                "(eventfd: %d) -> event_count: %d\n\n",
+                                    rfd, eventfd_count);
 
-                eventfd_count++;
-                virtio_irq(global_vdev->vq);
+            eventfd_count++;
+            if (event_notifier_test_and_clear(e)) {
+                virtio_irq(vq);
             }
 
-        } else if (retval == 0) {
-            DBG("\nselect() says that no data was available");
         }
     }
 }
@@ -1131,16 +1134,15 @@ void event_notifier_set_handler(EventNotifier *e,
     int ret;
     pthread_t thread_id;
 
-    vhost_user_loopback_eventfd = e->wfd;
-
-    if (vhost_user_loopback_eventfd > 0) {
+    if (e->wfd > 0) {
         ret = pthread_create(&thread_id, NULL, loopback_event_select,
-                             (void *)(&(e->wfd)));
+                             (void *)e);
         if (ret != 0) {
             exit(1);
         }
     }
 }
+
 
 void virtio_queue_set_guest_notifier_fd_handler(VirtQueue *vq, bool assign,
                                                 bool with_irqfd)
@@ -1370,6 +1372,7 @@ void virtio_queue_notify(VirtIODevice *vdev, int n)
     }
 
     if (vq->host_notifier_enabled) {
+        DBG("vq->host_notifier_enabled\n");
         event_notifier_set(&vq->host_notifier);
     } else if (vq->handle_output) {
         DBG("vq->handle_output\n");
@@ -1913,11 +1916,39 @@ void adapter_read_write_cb(void)
 
 }
 
+void *notify_select(void *data)
+{
+    int retval;
+    fd_set rfds;
+    int efd = *(int *)data;
+
+    DBG("\nWaiting for loopback notify events\n");
+
+    FD_ZERO(&rfds);
+    FD_SET(efd, &rfds);
+
+    while (1) {
+
+        retval = select(efd + 1, &rfds, NULL, NULL, NULL);
+
+        if (retval > 0) {
+            s = read(efd, &eftd_ctr, sizeof(uint64_t));
+            if (s != sizeof(uint64_t)) {
+                DBG("Eventfd read error\n");
+                exit(1);
+            } else {
+                //rcu_read_lock();
+                virtio_queue_notify(global_vdev, 0);
+                //rcu_read_unlock();
+            }
+        }
+    }
+}
 
 void *driver_event_select(void *data)
 {
     int retval;
-    (void) data;
+    int efd = *(int *)data;
 
     DBG("\nWaiting for loopback read/write events\n");
 
@@ -1945,7 +1976,6 @@ void *driver_event_select(void *data)
             DBG("\nselect() says that no data was available");
         }
     }
-
 }
 
 void create_rng_struct(void)
@@ -2055,10 +2085,9 @@ int virtio_loopback_start(void)
 {
     efd_data_t info;
     pthread_t thread_id;
+    pthread_t thread_id_notify;
     int ret = -1;
     int flags;
-
-    (void)info;
 
     fd = open("/dev/loopback", O_RDWR);
     if (fd < 0) {
@@ -2074,8 +2103,15 @@ int virtio_loopback_start(void)
         exit(EXIT_FAILURE);
     }
 
+    efd_notify = eventfd(0, 0);
+    if (efd_notify == -1) {
+        DBG("\nUnable to create eventfd! Exiting...\n");
+        exit(EXIT_FAILURE);
+    }
+
     info.pid = getpid();
-    info.efd = efd;
+    info.efd[0] = efd;
+    info.efd[1] = efd_notify;
 
     /*
      * Send the appropriate information to the driver
@@ -2092,7 +2128,13 @@ int virtio_loopback_start(void)
     }
 
     /* Wait the eventfd */
-    ret = pthread_create(&thread_id, NULL, driver_event_select, NULL);
+    ret = pthread_create(&thread_id, NULL, driver_event_select, (void *)&efd);
+    if (ret != 0) {
+        exit(1);
+    }
+
+    /* Wait the eventfd */
+    ret = pthread_create(&thread_id_notify, NULL, notify_select, (void *)&efd_notify);
     if (ret != 0) {
         exit(1);
     }
@@ -2101,6 +2143,11 @@ int virtio_loopback_start(void)
     (void)ioctl(fd, START_LOOPBACK, &device_info);
 
     ret = pthread_join(thread_id, NULL);
+    if (ret != 0) {
+        exit(1);
+    }
+
+    ret = pthread_join(thread_id_notify, NULL);
     if (ret != 0) {
         exit(1);
     }

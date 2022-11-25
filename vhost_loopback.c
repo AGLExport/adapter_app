@@ -260,7 +260,7 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
 
     /* The next line has to be disable for rng */
     /* Clear and discard previous events if any. */
-    //event_notifier_test_and_clear(virtio_queue_get_host_notifier(vvq));
+    event_notifier_test_and_clear(virtio_queue_get_host_notifier(vvq));
 
     file.fd = event_notifier_get_fd(virtio_queue_get_host_notifier(vvq));
     r = vhost_user_set_vring_kick(&file);

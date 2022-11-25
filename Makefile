@@ -22,13 +22,13 @@
 #CFLAGS := -Wall -Wextra -Wno-unused-variable -Wno-unused-function
 CFLAGS := -Wno-unused-variable -Wno-unused-function
 CFLAGS =
-CC =
+CC ?=
 
 ifeq ($(ARCH), arm64)
  # arm64
- CC = aarch64-linux-gnu-gcc
+ CC ?= aarch64-linux-gnu-gcc
 else
- CC = gcc
+ CC ?= gcc
 endif
 
 ifeq ($(VHOST_USER_RNG), 1)

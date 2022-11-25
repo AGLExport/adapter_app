@@ -255,6 +255,10 @@ typedef struct VirtIOMMIOProxy {
 /******************/
 
 
+#define container_of(ptr, type, member) ({                      \
+        const typeof(((type *) 0)->member) *__mptr = (ptr);     \
+        (type *) ((char *) __mptr - offsetof(type, member));})
+
 extern uint64_t vring_phys_addrs[2];
 extern uint32_t vring_phys_addrs_idx;
 
@@ -398,7 +402,7 @@ typedef struct VirtIODevice {
 } VirtIODevice;
 
 typedef struct efd_data {
-    int efd;
+    int efd[2];
     int pid;
 } efd_data_t;
 

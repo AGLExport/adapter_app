@@ -244,7 +244,6 @@ extern struct vhost_user *vudev;
 /* Based on qemu/hw/virtio/vhost-user.c */
 #define VHOST_USER_F_PROTOCOL_FEATURES 30
 #define VHOST_LOG_PAGE 4096
-#define VIRTQUEUE_MAX_SIZE 1024
 #define VHOST_MEMORY_BASELINE_NREGIONS 8
 
 /* The version of the protocol we support */

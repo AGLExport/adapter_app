@@ -465,7 +465,15 @@ void vhost_user_share_fd(void)
      * msg.flags &= ~VHOST_USER_NEED_REPLY_MASK;
      */
 
-    (void)vu_message_write(client_sock, &msg);
+    if (vu_message_write(client_sock, &msg) < 0) {
+        DBG("vhost_user_share_fd -> write failed\n");
+        exit(1);
+    }
+
+    if (msg.flags & VHOST_USER_NEED_REPLY_MASK) {
+        process_message_reply(&msg);
+    }
+
 }
 
 int vhost_set_vring_file(VhostUserRequest request,
