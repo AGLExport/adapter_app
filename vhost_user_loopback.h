@@ -34,6 +34,7 @@
 #include <linux/vhost.h>
 #include <pthread.h>
 #include "virtio_loopback.h"
+#include "queue.h"
 
 typedef struct adapter_dev {
     struct vhost_dev *vdev;
@@ -41,6 +42,15 @@ typedef struct adapter_dev {
     VirtIODevice *virtio_dev;
     VirtioBus *vbus;
 } AdapterDev;
+
+
+
+
+struct scrub_regions {
+    struct vhost_memory_region *region;
+    int reg_idx;
+    int fd_idx;
+};
 
 struct vhost_virtqueue {
     int kick;
@@ -64,8 +74,25 @@ typedef struct VhostDevConfigOps {
     int (*vhost_dev_config_notifier)(struct vhost_dev *dev);
 } VhostDevConfigOps;
 
+
+typedef struct MemoryRegion MemoryRegion;
+
+typedef struct MemoryRegionSection {
+    uint64_t size;
+    MemoryRegion *mr;
+    uint64_t offset_within_region;
+    uint64_t offset_within_address_space;
+    bool readonly;
+    bool nonvolatile;
+} MemoryRegionSection;
+
 struct vhost_dev {
     VirtIODevice *vdev;
+    struct vhost_memory *mem;
+    int n_mem_sections;
+    MemoryRegionSection *mem_sections;
+    int n_tmp_sections;
+    MemoryRegionSection *tmp_sections;
     struct vhost_virtqueue *vqs;
     unsigned int nvqs;
     /* the first virtqueue which would be used by this vhost dev */
@@ -73,7 +100,7 @@ struct vhost_dev {
     /* one past the last vq index for the virtio device (not vhost) */
     int vq_index_end;
     /* if non-zero, minimum required value for max_queues */
-    uint64_t num_queues;
+    int num_queues;
     uint64_t features;
     uint64_t acked_features;
     uint64_t backend_features;
@@ -84,19 +111,128 @@ struct vhost_dev {
     bool log_enabled;
     uint64_t log_size;
     void *migration_blocker;
-    /* Vhost-user struct */
+    void *opaque;
+    struct vhost_log *log;
+    QLIST_ENTRY(vhost_dev) entry;
     uint64_t memory_slots;
     const VhostDevConfigOps *config_ops;
 };
 
+
+#define VHOST_USER_MAX_RAM_SLOTS 512
+
+typedef uint64_t ram_addr_t;
+typedef struct RAMBlock RAMBlock;
+
+typedef struct RAMBlock {
+    struct MemoryRegion *mr;
+    uint8_t *host;
+    uint8_t *colo_cache; /* For colo, VM's ram cache */
+    ram_addr_t offset;
+    ram_addr_t used_length;
+    ram_addr_t max_length;
+    void (*resized)(const char*, uint64_t length, void *host);
+    uint32_t flags;
+    /* Protected by iothread lock.  */
+    char idstr[256];
+    /* RCU-enabled, writes protected by the ramlist lock */
+    int fd;
+    size_t page_size;
+    /* dirty bitmap used during migration */
+    unsigned long *bmap;
+    /* bitmap of already received pages in postcopy */
+    unsigned long *receivedmap;
+
+    /*
+     * bitmap to track already cleared dirty bitmap.  When the bit is
+     * set, it means the corresponding memory chunk needs a log-clear.
+     * Set this up to non-NULL to enable the capability to postpone
+     * and split clearing of dirty bitmap on the remote node (e.g.,
+     * KVM).  The bitmap will be set only when doing global sync.
+     *
+     * NOTE: this bitmap is different comparing to the other bitmaps
+     * in that one bit can represent multiple guest pages (which is
+     * decided by the `clear_bmap_shift' variable below).  On
+     * destination side, this should always be NULL, and the variable
+     * `clear_bmap_shift' is meaningless.
+     */
+    unsigned long *clear_bmap;
+    uint8_t clear_bmap_shift;
+
+    /*
+     * RAM block length that corresponds to the used_length on the migration
+     * source (after RAM block sizes were synchronized). Especially, after
+     * starting to run the guest, used_length and postcopy_length can differ.
+     * Used to register/unregister uffd handlers and as the size of the received
+     * bitmap. Receiving any page beyond this length will bail out, as it
+     * could not have been valid on the source.
+     */
+    ram_addr_t postcopy_length;
+} RAMBlock;
+
+
+/*
+ * MemoryRegion:
+ *
+ * A struct representing a memory region.
+ */
+typedef struct MemoryRegion {
+    /* private: */
+
+    /* The following fields should fit in a cache line */
+    bool romd_mode;
+    bool ram;
+    bool subpage;
+    bool readonly; /* For RAM regions */
+    bool nonvolatile;
+    bool rom_device;
+    bool flush_coalesced_mmio;
+    uint8_t dirty_log_mask;
+    bool is_iommu;
+    RAMBlock *ram_block;
+
+    void *opaque;
+    MemoryRegion *container;
+    uint64_t size;
+    uint64_t addr;
+    void (*destructor)(MemoryRegion *mr);
+    uint64_t align;
+    bool terminates;
+    bool ram_device;
+    bool enabled;
+    bool warning_printed; /* For reservations */
+    uint8_t vga_logging_count;
+    MemoryRegion *alias;
+    uint64_t alias_offset;
+    int32_t priority;
+    QTAILQ_HEAD(, MemoryRegion) subregions;
+    QTAILQ_ENTRY(MemoryRegion) subregions_link;
+    const char *name;
+    unsigned ioeventfd_nb;
+} MemoryRegion;
+
 struct vhost_user {
     struct vhost_dev *dev;
+
+    /* Shared between vhost devs of the same virtio device */
+
+    uint64_t           postcopy_client_bases[VHOST_USER_MAX_RAM_SLOTS];
     /* Length of the region_rb and region_rb_offset arrays */
     size_t             region_rb_len;
+    /* RAMBlock associated with a given region */
+    RAMBlock         **region_rb;
+    /*
+     * The offset from the start of the RAMBlock to the start of the
+     * vhost region.
+     */
+    ram_addr_t        *region_rb_offset;
+
     /* True once we've entered postcopy_listen */
     bool               postcopy_listen;
+
     /* Our current regions */
     int num_shadow_regions;
+    struct vhost_memory_region shadow_regions[VHOST_USER_MAX_RAM_SLOTS];
 };
 
 /* Global variables */
@@ -118,7 +254,6 @@ extern struct vhost_user *vudev;
  * Set a reasonable maximum number of ram slots, which will be supported by
  * any architecture.
  */
-#define VHOST_USER_MAX_RAM_SLOTS 32
 #define VHOST_USER_HDR_SIZE offsetof(VhostUserMsg, payload.u64)
 
 /*
@@ -808,6 +943,12 @@ int vhost_user_get_config(struct vhost_dev *dev, uint8_t *config,
                           uint32_t config_len);
 int vhost_user_set_config(struct vhost_dev *dev, const uint8_t *data,
                           uint32_t offset, uint32_t size, uint32_t flags);
+
+void vhost_commit_init_vqs(struct vhost_dev *dev);
+void vhost_commit_vqs(struct vhost_dev *dev);
+void find_add_new_reg(struct vhost_dev *dev);
+void print_mem_table(struct vhost_dev *dev);
+
 
 /* FIXME: This need to move in a better place */
 struct vhost_inflight;

@@ -155,7 +155,9 @@
 
 /* Loopback negotiation code */
 
+#define PAGE_SHIFT    12
 #define PAGE_SIZE     4096
+
 #define EFD_INIT _IOC(_IOC_WRITE, 'k', 1, sizeof(efd_data_t))
 #define WAKEUP _IOC(_IOC_WRITE, 'k', 2, 0)
 #define START_LOOPBACK _IOC(_IOC_WRITE, 'k', 3, \
@@ -166,6 +168,7 @@
 #define USED_INFO _IOC(_IOC_WRITE, 'k', 7, 0)
 #define DATA_INFO _IOC(_IOC_WRITE, 'k', 8, 0)
 #define MAP_BLK _IOC(_IOC_WRITE, 'k', 9, 0)
+#define BARRIER _IOC(_IOC_WRITE, 'k', 10, 0)
 
 #define VIRTIO_PCI_VRING_ALIGN         4096
 
@@ -250,6 +253,10 @@ typedef struct VirtIOMMIOProxy {
 #define VRING_USED_ALIGN_SIZE 4
 #define VRING_DESC_ALIGN_SIZE 16
 /******************/
+
+
+extern uint64_t vring_phys_addrs[2];
+extern uint32_t vring_phys_addrs_idx;
 
 typedef struct VRing {
     unsigned int num;
@@ -355,6 +362,7 @@ typedef struct VirtioBus VirtioBus;
 typedef struct VirtIODevice {
     VirtioBus *vbus;
     VirtioDeviceClass *vdev_class;
+    struct vhost_dev *vhdev;
     const char *name;
     uint8_t status;
     uint8_t isr;
@@ -369,6 +377,7 @@ typedef struct VirtIODevice {
     int nvectors;
     VirtQueue *vq;
     VirtQueue **vqs;
+    int *nvqs;
     uint16_t device_id;
     bool vm_running;
     bool broken; /* device in invalid state, needs reset */
@@ -549,6 +558,9 @@ typedef struct VirtioDeviceClass {
      */
     int (*post_load)(VirtIODevice *vdev);
     bool (*primary_unplug_pending)(void *opaque);
+
+    void (*update_mem_table)(VirtIODevice *vdev);
+
     struct vhost_dev *(*get_vhost)(VirtIODevice *vdev);
 } VirtioDeviceClass;
 
@@ -619,6 +631,7 @@ void virtio_notify(VirtIODevice *vdev, VirtQueue *vq);
 int virtqueue_split_read_next_desc(VirtIODevice *vdev, VRingDesc *desc,
                                    unsigned int max, unsigned int *next);
 void print_config(uint8_t *config);
+uint32_t get_vqs_max_size(VirtIODevice *vdev);
 
 /*
  * Do we get callbacks when the ring is completely used, even if we've

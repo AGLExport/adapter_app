@@ -139,6 +139,7 @@ static void virtio_dev_class_init(VirtIODevice *vdev)
     vdev->vdev_class->get_features = vu_rng_get_features;
     vdev->vdev_class->guest_notifier_mask = vu_rng_guest_notifier_mask;
     vdev->vdev_class->guest_notifier_pending = vu_rng_guest_notifier_pending;
+    vdev->vdev_class->update_mem_table = update_mem_table;
 }
 
 
@@ -146,6 +147,7 @@ void vhost_user_rng_init(VirtIODevice *vdev)
 {
     VHostUserRNG *vhrng = (VHostUserRNG *)malloc(sizeof(VHostUserRNG));
     vdev->vhrng = vhrng;
+    vdev->nvqs = &dev->nvqs;
     vhrng->parent = vdev;
     vhrng->req_vq = vdev->vq;
     vhrng->vhost_dev = dev;
@@ -166,6 +168,7 @@ static void vu_rng_handle_output(VirtIODevice *vdev, VirtQueue *vq)
 
 void vhost_user_rng_realize(void)
 {
+    /* Initiliaze virtio_dev data structures */
     virtio_dev_init(global_vdev, "virtio-rng", 4, 0);
 
     /* This needs to be change to vhost-user-rng init */
@@ -185,5 +188,6 @@ void vhost_user_rng_realize(void)
     dev->vqs = (struct vhost_virtqueue *)malloc(dev->nvqs *
                                                 sizeof(struct vhost_virtqueue));
 
+    /* Initiale vhost-user communication */
     vhost_dev_init(dev);
 }

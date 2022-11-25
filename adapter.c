@@ -80,6 +80,8 @@ void vhost_user_adapter_init(void)
     global_vbus = (VirtioBus *)malloc(sizeof(VirtioBus));
     global_vbus->vdev = global_vdev;
     global_vdev->vbus = global_vbus;
+    global_vdev->vhdev = dev;
+
 
     /* Store virtio_dev reference into vhost_dev struct*/
     dev->vdev = global_vdev;
@@ -131,17 +133,87 @@ void client(char *sock_path)
 
 static void help_args(void)
 {
-    printf("Run example:\n\t./adapter -s /path_to_socket/rng.sock\n");
+    printf("Run example:\n\t./adapter -s /path_to_socket/rng.sock\n"
+           "\t\t  -d device_name\n"
+           "The 'device_name' can be one of the following:\n"
+           "\tvrng, vhurng, vhublk, vhuinput\n");
+}
+
+int find_arg(int argc, char **argv, char *str)
+{
+    int i;
+
+    for (i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], str)) {
+            return i + 1;
+        }
+    }
+    printf("You have not specified parameter \"%s\"\n", str);
+    return -1;
+}
+
+int val_device_arg(char *str)
+{
+    char *adapter_devices[] = {"vrng", "vhurng", "vhublk", "vhuinput"};
+    char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput"};
+    int adapter_devices_num = 4, i;
+
+    for (i = 0; i < adapter_devices_num; i++) {
+        if (!strcmp(adapter_devices[i], str)) {
+            return i + 1;
+        }
+    }
+
+    return 0;
+}
+
+bool check_vhu_device(char *str)
+{
+    char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput"};
+    int vhu_devices_num = 3, i;
+
+    for (i = 0; i < vhu_devices_num; i++) {
+        if (!strcmp(vhu_devices[i], str)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 int main(int argc, char **argv)
 {
-#ifdef VHOST_USER
+    int socket_idx, device_idx, device_id;
+    bool vhost_user_enabled;
+
     /*
-     * Check if the user has provided a socket path.
+     * Check if the user has provided all the required arguments.
      * If not, print the help messages.
      */
-    if ((argc <= 2) || (strcmp(argv[1], "-s") != 0)) {
+
+    device_idx = find_arg(argc, argv, "-d");
+
+    if (device_idx < 0) {
+        goto error_args;
+    }
+
+    /* Validate the argumetns */
+
+    device_id = val_device_arg(argv[device_idx]);
+
+    if (device_id == 0) {
+        goto error_args;
+    }
+
+    /* Check if this is a vhost-user device */
+    vhost_user_enabled = check_vhu_device(argv[device_idx]);
+
+
+    /* Check if a socket is needed and provided */
+
+    socket_idx = find_arg(argc, argv, "-s");
+
+    if ((socket_idx  < 0) && (vhost_user_enabled)) {
         goto error_args;
     }
 
@@ -149,39 +221,33 @@ int main(int argc, char **argv)
      * Create the socket and connect to the backend.
      * Enabled on vhost-user case
      */
-    client(argv[2]);
-#endif
+    if (vhost_user_enabled) {
+        client(argv[socket_idx]);
+    }
 
     /* Initialize the adapter data structures */
     vhost_user_adapter_init();
 
 
     /* Initialize the virtio/vhost-user device */
-#ifdef VHOST_USER
-
-#ifdef VHOST_USER_INPUT_DEV
-    vhost_user_input_init(global_vdev); /* <-- Enable that for vhost-user-rng */
-    virtio_input_device_realize();
-#endif /* VHOST_USER_INPUT_DEV */
-
-#ifdef VHOST_USER_BLK_DEV
-    vhost_user_blk_realize(); /* <-- Enable that for vhost-user-blk */
-#endif /* VHOST_USER_BLK_DEV */
-
-#ifdef VHOST_USER_RNG_DEV
-    vhost_user_rng_realize(); /* <-- Enable that for vhost-user-rng */
-#endif /* VHOST_USER_RNG_DEV */
-
-#else /* VHOST_USER */
-
-#ifdef VIRTIO_RNG
-    virtio_rng_realize(); /* <-- Enable that for simple rng */
-#else /* VIRTIO_RNG */
-    DBG("You have not defined any device\n");
-    exit(1);
-#endif /* VIRTIO_RNG */
-
-#endif /* VHOST_USER */
+    switch (device_id) {
+    case 1:
+        virtio_rng_realize(); /* <-- Enable that for simple rng */
+        break;
+    case 2:
+        vhost_user_rng_realize(); /* <-- Enable that for vhost-user-rng */
+        break;
+    case 3:
+        vhost_user_blk_realize(); /* <-- Enable that for vhost-user-blk */
+        break;
+    case 4:
+        /* Enable that for vhost-user-rng */
+        vhost_user_input_init(global_vdev);
+        virtio_input_device_realize();
+        break;
+    default:
+        exit(1);
+    }
 
     /*
      * Start loopback trasnport layer and communiation with the loopback driver

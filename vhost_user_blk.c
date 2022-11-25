@@ -98,11 +98,13 @@ static int vhost_user_blk_start(VirtIODevice *vdev)
 
     DBG("After vhost_dev_set_inflight\n");
 
+
     ret = vhost_dev_start(s->vhost_dev, vdev);
     if (ret < 0) {
         DBG("Error starting vhost\n");
         return ret;
     }
+
     s->started_vu = true;
 
     DBG("vhost_virtqueue_mask\n");
@@ -172,6 +174,8 @@ static uint64_t vhost_user_blk_get_features(VirtIODevice *vdev,
     virtio_add_feature(&features, VIRTIO_BLK_F_FLUSH);
     virtio_add_feature(&features, VIRTIO_BLK_F_DISCARD);
     virtio_add_feature(&features, VIRTIO_BLK_F_WRITE_ZEROES);
+    virtio_add_feature(&features, VIRTIO_BLK_F_BLK_SIZE);
+    virtio_add_feature(&features, VIRTIO_BLK_F_RO);
     /*
      * TODO: Delete if not needed
      * virtio_add_feature(&features, VIRTIO_BLK_F_BLK_SIZE);
@@ -184,11 +188,16 @@ static uint64_t vhost_user_blk_get_features(VirtIODevice *vdev,
      *
      */
 
+    if (s->config_wce) {
+        DBG("Add config feature\n");
+        virtio_add_feature(&features, VIRTIO_BLK_F_CONFIG_WCE);
+    }
+
     if (s->num_queues > 1) {
         virtio_add_feature(&features, VIRTIO_BLK_F_MQ);
     }
 
-    return features;
+    return vhost_user_get_features(&features);
 }
 
 static int vhost_user_blk_connect(VirtIODevice *vdev)
@@ -320,6 +329,10 @@ static void vhost_user_blk_set_config(VirtIODevice *vdev, const uint8_t *config)
      *     return;
      * }
      */
+    if (blkcfg->wce == s->blkcfg.wce) {
+        DBG("blkcfg->wce == s->blkcfg.wce\n");
+        return;
+    }
 
     ret = vhost_dev_set_config(s->vhost_dev, &blkcfg->wce,
                                offsetof(struct virtio_blk_config, wce),
@@ -382,6 +395,7 @@ static void virtio_dev_class_init(VirtIODevice *vdev)
     vdev->vdev_class->get_features = vhost_user_blk_get_features;
     vdev->vdev_class->set_status = vhost_user_blk_set_status;
     vdev->vdev_class->reset = vhost_user_blk_reset;
+    vdev->vdev_class->update_mem_table = update_mem_table;
 }
 
 
@@ -392,6 +406,7 @@ void vhost_user_blk_init(VirtIODevice *vdev)
 
     VHostUserBlk *vhublk = (VHostUserBlk *)malloc(sizeof(VHostUserBlk));
     vdev->vhublk = vhublk;
+    vdev->nvqs = &dev->nvqs;
     vhublk->parent = vdev;
     vhublk->virtqs = vdev->vqs;
     vhublk->vhost_dev = dev;
@@ -472,6 +487,7 @@ void vhost_user_blk_realize(void)
 
     vhost_user_blk_init(global_vdev);
 
+    global_vdev->vhublk->config_wce = 1;
     /* FIXME: We temporarily hardcoded the vrtqueues number */
     global_vdev->vhublk->num_queues = 1;
 

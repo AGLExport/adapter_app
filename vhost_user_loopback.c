@@ -225,6 +225,7 @@ int process_message_reply(const VhostUserMsg *msg)
     VhostUserMsg msg_reply;
 
     if ((msg->flags & VHOST_USER_NEED_REPLY_MASK) == 0) {
+        DBG("Don't wait for any reply!\n");
         return 0;
     }
 
@@ -813,15 +814,303 @@ int vhost_user_set_inflight_fd(struct vhost_dev *dev,
 }
 
 
-/* -------------------- Vring functions -------------------- */
+/* -------------------- Mem regions functions -------------------- */
+
+
+static MemoryRegion *vhost_user_get_mr_data(struct vhost_memory_region *reg,
+                                            ram_addr_t *offset, int *fd)
+{
+    MemoryRegion *mr;
+
+    *offset = reg->guest_phys_addr & (PAGE_SIZE - 1);
+
+    *fd = loopback_fd;
+
+    return mr;
+}
+
+static void vhost_user_fill_msg_region(VhostUserMemoryRegion *dst,
+                                       struct vhost_memory_region *src,
+                                       uint64_t mmap_offset)
+{
+    assert(src != NULL && dst != NULL);
+    dst->userspace_addr = src->userspace_addr;
+    dst->memory_size = src->memory_size;
+    dst->guest_phys_addr = src->guest_phys_addr;
+    dst->mmap_offset = mmap_offset;
+}
+
+
+
+
+static int vhost_user_fill_set_mem_table_msg(struct vhost_user *u,
+                                             struct vhost_dev *dev,
+                                             VhostUserMsg *msg,
+                                             int *fds, size_t *fd_num,
+                                             bool track_ramblocks)
+{
+    DBG("vhost_user_fill_set_mem_table_msg(...) not yet implemented\n");
+    return 1;
+}
+
+static inline bool reg_equal(struct vhost_memory_region *shadow_reg,
+                             struct vhost_memory_region *vdev_reg)
+{
+    return shadow_reg->guest_phys_addr == vdev_reg->guest_phys_addr &&
+        shadow_reg->userspace_addr == vdev_reg->userspace_addr &&
+        shadow_reg->memory_size == vdev_reg->memory_size;
+}
+
+
+/* Sync the two region lists (device / adapter) */
+static void scrub_shadow_regions(struct vhost_dev *dev,
+                                 struct scrub_regions *add_reg,
+                                 int *nr_add_reg,
+                                 struct scrub_regions *rem_reg,
+                                 int *nr_rem_reg, uint64_t *shadow_pcb,
+                                 bool track_ramblocks)
+{
+    struct vhost_user *u = adev->vudev;
+    bool found[VHOST_USER_MAX_RAM_SLOTS] = {};
+    struct vhost_memory_region *reg, *shadow_reg;
+    int i, j, fd, add_idx = 0, rm_idx = 0, fd_num = 0;
+    ram_addr_t offset;
+    MemoryRegion *mr;
+    bool matching;
+
+    /*
+     * Find memory regions present in our shadow state which are not in
+     * the device's current memory state.
+     *
+     * Mark regions in both the shadow and device state as "found".
+     */
+    for (i = 0; i < u->num_shadow_regions; i++) {
+        shadow_reg = &u->shadow_regions[i];
+        matching = false;
+
+        for (j = 0; j < dev->mem->nregions; j++) {
+            reg = &dev->mem->regions[j];
+
+            mr = vhost_user_get_mr_data(reg, &offset, &fd);
+
+            if (reg_equal(shadow_reg, reg)) {
+                matching = true;
+                found[j] = true;
+                break;
+            }
+        }
+
+        /*
+         * If the region was not found in the current device memory state
+         * create an entry for it in the removed list.
+         */
+        if (!matching) {
+            rem_reg[rm_idx].region = shadow_reg;
+            rem_reg[rm_idx++].reg_idx = i;
+        }
+    }
+
+    /*
+     * For regions not marked "found", create entries in the added list.
+     *
+     * Note their indexes in the device memory state and the indexes of their
+     * file descriptors.
+     */
+
+    DBG("For regions not marked 'found', create entries in the added list\n");
+    DBG("dev->mem->nregions: %d\n", dev->mem->nregions);
+
+    for (i = 0; i < dev->mem->nregions; i++) {
+
+        reg = &dev->mem->regions[i];
+
+        mr = vhost_user_get_mr_data(reg, &offset, &fd);
+
+        /*
+         * If the region was in both the shadow and device state we don't
+         * need to send a VHOST_USER_ADD_MEM_REG message for it.
+         */
+        if (found[i]) {
+            continue;
+        }
+
+        add_reg[add_idx].region = reg;
+        add_reg[add_idx].reg_idx = i;
+        add_reg[add_idx++].fd_idx = fd_num;
+
+    }
+    *nr_rem_reg = rm_idx;
+    *nr_add_reg = add_idx;
+
+    return;
+}
+
+
+static int send_remove_regions(struct vhost_dev *dev,
+                               struct scrub_regions *remove_reg,
+                               int nr_rem_reg, VhostUserMsg *msg,
+                               bool reply_supported)
+{
+    struct vhost_user *u = adev->vudev;
+    struct vhost_memory_region *shadow_reg;
+    int i, fd, shadow_reg_idx, ret;
+    ram_addr_t offset;
+    VhostUserMemoryRegion region_buffer;
+
+    /*
+     * The regions in remove_reg appear in the same order they do in the
+     * shadow table. Therefore we can minimize memory copies by iterating
+     * through remove_reg backwards.
+     */
+    for (i = nr_rem_reg - 1; i >= 0; i--) {
+        shadow_reg = remove_reg[i].region;
+        shadow_reg_idx = remove_reg[i].reg_idx;
+
+        DBG("Try to remove: 0x%llx\n", remove_reg[i].region->guest_phys_addr);
+
+        (void)vhost_user_get_mr_data(shadow_reg, &offset, &fd);
+
+        if (fd > 0) {
+            msg->request = VHOST_USER_REM_MEM_REG;
+            vhost_user_fill_msg_region(&region_buffer, shadow_reg, 0);
+            msg->payload.memreg.region = region_buffer;
+
+            msg->fd_num = 1;
+            memcpy(msg->fds, &loopback_fd, sizeof(int));
+
+            if (vu_message_write(client_sock, msg) < 0) {
+                return -1;
+            }
+
+            if (reply_supported) {
+                msg->flags |= VHOST_USER_NEED_REPLY_MASK;
+                ret = process_message_reply(msg);
+
+                /*
+                 * TODO: For this release do not process the message:
+                 * if (ret) {
+                 *     return ret;
+                 * }
+                 */
+            }
+        }
+
+    }
+
+    return 0;
+}
+
+static int send_add_regions(struct vhost_dev *dev,
+                            struct scrub_regions *add_reg, int nr_add_reg,
+                            VhostUserMsg *msg, uint64_t *shadow_pcb,
+                            bool reply_supported, bool track_ramblocks)
+{
+    struct vhost_user *u = adev->vudev;
+    int i, fd, ret, reg_idx, reg_fd_idx;
+    struct vhost_memory_region *reg;
+    MemoryRegion *mr;
+    ram_addr_t offset;
+    VhostUserMsg msg_reply;
+    VhostUserMemoryRegion region_buffer;
+
+    for (i = 0; i < nr_add_reg; i++) {
+        reg = add_reg[i].region;
+        reg_idx = add_reg[i].reg_idx;
+        reg_fd_idx = add_reg[i].fd_idx;
+
+        DBG("Try to add: 0x%llx\n", add_reg[i].region->guest_phys_addr);
+
+        mr = vhost_user_get_mr_data(reg, &offset, &fd);
+
+        if (fd > 0) {
+
+            msg->request = VHOST_USER_ADD_MEM_REG;
+            vhost_user_fill_msg_region(&region_buffer, reg, offset);
+            msg->payload.memreg.region = region_buffer;
+
+            msg->fd_num = 1;
+            memcpy(msg->fds, &loopback_fd, sizeof(int));
+
+            if (vu_message_write(client_sock, msg) < 0) {
+                DBG("send_add_regions -> write failed\n");
+                return -1;
+            }
+
+            if (reply_supported) {
+                msg->flags |= VHOST_USER_NEED_REPLY_MASK;
+                ret = process_message_reply(msg);
+
+                /*
+                 * TODO: For this release do not process the message:
+                 * if (ret) {
+                 *     return ret;
+                 * }
+                 */
+            }
+        } else if (track_ramblocks) {
+            u->region_rb_offset[reg_idx] = 0;
+            u->region_rb[reg_idx] = NULL;
+        }
+
+    }
+
+    return 0;
+}
+
+static int vhost_user_add_remove_regions(struct vhost_dev *dev,
+                                         VhostUserMsg *msg,
+                                         bool reply_supported,
+                                         bool track_ramblocks)
+{
+    struct vhost_user *u = adev->vudev;
+    struct scrub_regions add_reg[VHOST_USER_MAX_RAM_SLOTS];
+    struct scrub_regions rem_reg[VHOST_USER_MAX_RAM_SLOTS];
+    uint64_t shadow_pcb[VHOST_USER_MAX_RAM_SLOTS] = {};
+    int nr_add_reg, nr_rem_reg;
+
+    msg->size = sizeof(msg->payload.memreg);
+
+    /* Find the regions which need to be removed or added. */
+    scrub_shadow_regions(dev, add_reg, &nr_add_reg, rem_reg, &nr_rem_reg,
+                         shadow_pcb, track_ramblocks);
+
+    if (nr_rem_reg && send_remove_regions(dev, rem_reg, nr_rem_reg, msg,
+                reply_supported) < 0)
+    {
+        DBG("send_remove_regions failed\n");
+        goto err;
+    }
+
+    if (nr_add_reg && send_add_regions(dev, add_reg, nr_add_reg, msg,
+                shadow_pcb, reply_supported, track_ramblocks) < 0)
+    {
+        DBG("send_add_regions failed\n");
+        goto err;
+    }
+
+
+    /* TODO: At this point we need to update the shadow list */
+    u->num_shadow_regions = dev->mem->nregions;
+    memcpy(u->shadow_regions, dev->mem->regions,
+                dev->mem->nregions * sizeof(struct vhost_memory_region));
+
+    return 0;
+
+err:
+    DBG("vhost_user_add_remove_regions failed\n");
+    return -1;
+}
+
 
 /* TODO: This funciton might be implemented in a later release */
 static int vhost_user_set_mem_table_postcopy(struct vhost_dev *dev,
                                              bool reply_supported,
                                              bool config_mem_slots)
 {
+    DBG("vhost_user_set_mem_table_postcopy(...)\n");
     return 0;
 }
+
 
 /*
  * TODO: This function is not yet fully optimized because in the current release
@@ -837,6 +1126,7 @@ int vhost_user_set_mem_table(struct vhost_dev *dev)
         virtio_has_feature(dev->protocol_features,
                            VHOST_USER_PROTOCOL_F_CONFIGURE_MEM_SLOTS);
     int ret;
+    struct vhost_user *u = adev->vudev;
     bool do_postcopy = false;
 
     if (do_postcopy) {
@@ -856,17 +1146,221 @@ int vhost_user_set_mem_table(struct vhost_dev *dev)
         msg.flags |= VHOST_USER_NEED_REPLY_MASK;
     }
 
+    if (config_mem_slots) {
+        DBG("vonfig_mem_slots is enabled\n");
+        if (vhost_user_add_remove_regions(dev, &msg, reply_supported,
+                                          false) < 0) {
+            return -1;
+        }
+    } else {
+
+        DBG("To be implemented!\n");
+        exit(1);
+
+        if (vhost_user_fill_set_mem_table_msg(u, dev, &msg, fds, &fd_num,
+                                              false) < 0) {
+            return -1;
+        }
+        if (vu_message_write(client_sock, &msg) < 0) {
+            DBG("vhost_user_set_mem_table failed write msg\n");
+            return -1;
+        }
+
+        if (reply_supported) {
+            DBG("reply is supported\n");
+            return process_message_reply(&msg);
+        }
+    }
+
     return 0;
 }
 
-/* ----------------- End of Vring functions ---------------- */
+
+
+void print_mem_table(struct vhost_dev *dev)
+{
+    struct vhost_memory_region *cur_vmr;
+    int i;
+
+    DBG("print_mem_table:\n");
+
+    for (i = 0; i < dev->n_mem_sections; i++) {
+
+        cur_vmr = dev->mem->regions + i;
+        DBG("regions[%d]->guest_phys_addr: 0x%llx\n",
+                                i, cur_vmr->guest_phys_addr);
+        DBG("regions[%d]->memory_size: 0x%llu\n",
+                                i, cur_vmr->memory_size);
+        DBG("regions[%d]->userspace_addr: 0x%llx\n",
+                                i, cur_vmr->userspace_addr);
+        DBG("regions[%d]->flags_padding: 0x%llx\n",
+                                i, cur_vmr->flags_padding);
+
+    }
+}
+
+static void vhost_add_reg(struct vhost_dev *dev, uint64_t hpa, uint64_t len)
+{
+    size_t regions_size, old_regions_size;
+    struct vhost_memory *temp_mem;
+    struct vhost_memory_region *cur_vmr;
+
+    DBG("vhost_add_reg (hpa: 0x%lx, len: %lu)\n", hpa, len);
+
+    /* Rebuild the regions list from the new sections list */
+    regions_size = offsetof(struct vhost_memory, regions) +
+                       (dev->mem->nregions + 1) * sizeof dev->mem->regions[0];
+    temp_mem = (struct vhost_memory *)malloc(regions_size);
+
+    /* Copy the old mem structure */
+    old_regions_size = offsetof(struct vhost_memory, regions) +
+                       (dev->mem->nregions) * sizeof dev->mem->regions[0];
+    memcpy(temp_mem, dev->mem, old_regions_size);
+
+    /* Increase the regions' counter */
+    temp_mem->nregions = dev->mem->nregions + 1;
+    dev->n_mem_sections = temp_mem->nregions;
+
+    /* Clear the previous structure */
+    free(dev->mem);
+
+    /* Point to the new one */
+    dev->mem = temp_mem;
+
+    /* Init the new region */
+    cur_vmr = dev->mem->regions + (dev->mem->nregions - 1);
+    cur_vmr->guest_phys_addr = hpa;
+    cur_vmr->memory_size = len;
+    cur_vmr->userspace_addr  = 0;
+    cur_vmr->flags_padding   = 0;
+}
+
+static bool find_reg(struct vhost_dev *dev, uint64_t hpa, uint64_t len)
+{
+    struct vhost_memory_region *cur_vmr;
+    int i;
+
+    DBG("Try to find hpa: 0x%lx\n", hpa);
+
+    for (i = dev->nvqs; i < dev->n_mem_sections; i++) {
+
+        cur_vmr = dev->mem->regions + i;
+        if ((hpa >= cur_vmr->guest_phys_addr) &&
+            ((hpa + len) <= (cur_vmr->guest_phys_addr
+                             + cur_vmr->memory_size))) {
+            DBG("Find region with hpa: 0x%llx, and len: %lld\n",
+                    cur_vmr->guest_phys_addr, cur_vmr->memory_size);
+            return true;
+        }
+    }
+
+    DBG("Did not find region with hpa: 0x%lx\n", hpa);
+    return false;
+}
+
+int last_avail = -1;
+
+void find_add_new_reg(struct vhost_dev *dev)
+{
+    int sglist_elem_num;
+    int i;
+
+    (void)ioctl(loopback_fd, BARRIER);
+
+    DBG("Total nvqs: %d\n", dev->nvqs);
+    for (int i = 0; i < dev->nvqs; i++) {
+
+        VRing *vring = &dev->vdev->vq[i].vring;
+        uint64_t vring_num = vring->num;
+
+        DBG("For vq[%d]:\n", i);
+        DBG("vqs[%u] hpa 0x%lx\n", i, vring_phys_addrs[i]);
+        DBG("vq[%d].vring.num: %ld\n", i, vring_num);
+        DBG("We got avail buf: %d\n",
+                ((VRingAvail *)(dev->vdev->vq[i].vring.avail))->idx);
+
+        int avail_diff = ((VRingAvail *)(dev->vdev->vq[i].vring.avail))->idx
+                                                                - last_avail;
+
+        for (int j = 0; j < vring_num; j++) {
+
+            uint64_t desc_addr = dev->vdev->vq[i].vring.desc;
+            VRingDesc desc_p = ((VRingDesc *)desc_addr)[j];
+            uint64_t sg_addr = desc_p.addr;
+            uint64_t sg_len = desc_p.len;
+
+            if (desc_p.addr == 0) {
+                sglist_elem_num = j;
+                DBG("We got avail buf: %d\n",
+                        ((VRingAvail *)(dev->vdev->vq[i].vring.avail))->idx);
+                DBG("We got sglist_ele_num: %d\n", sglist_elem_num);
+                break;
+            }
+
+
+            DBG("desc[%u] 0x%lx\n", j, desc_addr);
+            DBG("desc[%u].addr 0x%lx\n", j, sg_addr);
+            DBG("desc[%u].len 0x%lu\n", j, sg_len);
+            DBG("desc[%u].flags 0x%u\n", j, desc_p.flags);
+
+            if (!find_reg(dev, sg_addr, sg_len)) {
+                vhost_add_reg(dev, sg_addr, sg_len);
+            }
+
+        }
+        DBG("We got avail buf: %d\n",
+                ((VRingAvail *)(dev->vdev->vq[i].vring.avail))->idx);
+
+        last_avail = ((VRingAvail *)(dev->vdev->vq[i].vring.avail))->idx;
+        sglist_elem_num = 3 * avail_diff;
+    }
+}
+
+void vhost_commit_init_vqs(struct vhost_dev *dev)
+{
+    MemoryRegionSection *old_sections;
+    int n_old_sections;
+    uint64_t log_size;
+    size_t regions_size;
+    int r;
+    int i;
+    bool changed = false;
+    int sglist_elem_num;
+
+    dev->n_mem_sections = dev->nvqs;
+    DBG("dev->n_mem_sections: %d\n", dev->n_mem_sections);
+
+    /* Rebuild the regions list from the new sections list */
+    regions_size = offsetof(struct vhost_memory, regions) +
+                       dev->n_mem_sections * sizeof dev->mem->regions[0];
+    dev->mem = (struct vhost_memory *)malloc(regions_size);
+    dev->mem->nregions = dev->n_mem_sections;
+
+    for (i = 0; i < dev->nvqs; i++) {
+        struct vhost_memory_region *cur_vmr = dev->mem->regions + i;
+
+        cur_vmr->guest_phys_addr = vring_phys_addrs[i] << PAGE_SHIFT;
+        cur_vmr->memory_size = get_vqs_max_size(global_vdev);
+        cur_vmr->userspace_addr  = 0;
+        cur_vmr->flags_padding   = 0;
+    }
+}
+
+void vhost_commit_vqs(struct vhost_dev *dev)
+{
+    free(dev->mem);
+    vhost_commit_init_vqs(dev);
+    find_add_new_reg(dev);
+}
+
+
+/* -------------------- End of Mem regions functions -------------------- */
+
 
 int vhost_user_backend_init(struct vhost_dev *vhdev)
 {
     uint64_t features, protocol_features, ram_slots;
     int err;
-
-    DBG("vhost_user_backend_init(...)\n");
 
     err = vhost_user_get_features(&features);
     if (err < 0) {
@@ -1023,6 +1517,17 @@ void vhost_dev_init(struct vhost_dev *vhdev)
             DBG("Failed to initialize virtqueue %d", i);
         }
     }
+
+    vhdev->mem = (struct vhost_memory *)malloc(sizeof(struct vhost_memory));
+    vhdev->mem->nregions = 0;
+
+    vhdev->n_mem_sections = 0;
+    vhdev->mem_sections = NULL;
+    vhdev->log = NULL;
+    vhdev->log_size = 0;
+    vhdev->log_enabled = false;
+    vhdev->started = false;
+
 
     /*
      * TODO: busyloop == 0 in rng case, but we might need it for new devices:
