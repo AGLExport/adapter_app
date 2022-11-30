@@ -2,7 +2,7 @@
 
 This repository includes a alpha version of the "virtio_loopback_adapter" application which is part of the Virtio Loopback Design presented in this [document](https://git.virtualopensystems.com/virtio-loopback/docs/-/blob/master/design_docs).
 
-As described in the design document, the adapter is only a part of a more complex architecture. If you want to see the implementation and build the other componets, refer to the [virtio-loopback docs repository](https://git.virtualopensystems.com/c-022/virtio-loopback/docs).
+As described in the design document, the adapter is only a part of a more complex architecture. If you want to see the implementation and build the other componets, refer to the [virtio-loopback docs repository](https://git.virtualopensystems.com/virtio-loopback/docs/-/tree/alpha-release).
 
 ## Build the virtio-loopback adapter
 
