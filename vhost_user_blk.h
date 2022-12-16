@@ -54,7 +54,6 @@ struct VHostUserBlk {
     bool started_vu;
 };
 
-
-void vhost_user_blk_realize(void);
+void vhost_user_blk_realize(int queue_num, int queue_size);
 
 #endif /* VHOST_USER_BLK */

@@ -124,17 +124,18 @@ void client(char *sock_path)
     len = sizeof(client_sockaddr);
     rc = connect(client_sock, (struct sockaddr *) &client_sockaddr, len);
     if (rc == -1) {
-        DBG("CONNECT ERROR\n");
+        printf("CONNECT ERROR: Check the \"-s\" parameter\n");
         close(client_sock);
         exit(1);
     }
-
 }
 
 static void help_args(void)
 {
     printf("Run example:\n\t./adapter -s /path_to_socket/rng.sock\n"
            "\t\t  -d device_name\n"
+           "\t\t  [ -qn number of queues ]\n"
+           "\t\t  [ -qs size of queues ]\n"
            "The 'device_name' can be one of the following:\n"
            "\tvrng, vhurng, vhublk, vhuinput\n");
 }
@@ -148,7 +149,6 @@ int find_arg(int argc, char **argv, char *str)
             return i + 1;
         }
     }
-    printf("You have not specified parameter \"%s\"\n", str);
     return -1;
 }
 
@@ -181,24 +181,65 @@ bool check_vhu_device(char *str)
     return false;
 }
 
+void get_queue_num_size_args(int argc, char **argv,
+                             int *eval_queue_num, int *eval_queue_size)
+{
+    int queue_num, queue_size, queue_num_id, queue_size_id;
+
+    if (argc < 9) {
+        return;
+    }
+
+    queue_num_id = find_arg(argc, argv, "-qn");
+    queue_size_id = find_arg(argc, argv, "-qs");
+
+    /* Check if both qs ans qn exist */
+    if (queue_num_id < 0 || queue_size_id < 0) {
+        return;
+    }
+
+    queue_num = atoi(argv[queue_num_id]);
+    queue_size = atoi(argv[queue_size_id]);
+
+    /* Evaluate number of queues */
+    if (queue_num <= 0 || queue_num > 16) {
+        return;
+    }
+
+    /* Evaluate queues' size */
+    if (queue_size <= 0 || queue_size > 1024) {
+        return;
+    }
+
+    *eval_queue_num = queue_num;
+    *eval_queue_size = queue_size;
+}
+
+
 int main(int argc, char **argv)
 {
     int socket_idx, device_idx, device_id;
     bool vhost_user_enabled;
+    /* Assign default queue num and size */
+    int queue_num = 1, queue_size = 1024;
 
     /*
      * Check if the user has provided all the required arguments.
      * If not, print the help messages.
      */
 
+    if (argc < 5) {
+        goto error_args;
+    }
+
     device_idx = find_arg(argc, argv, "-d");
 
     if (device_idx < 0) {
+        printf("You have not specified parameter \"-d\"\n");
         goto error_args;
     }
 
     /* Validate the argumetns */
-
     device_id = val_device_arg(argv[device_idx]);
 
     if (device_id == 0) {
@@ -214,6 +255,7 @@ int main(int argc, char **argv)
     socket_idx = find_arg(argc, argv, "-s");
 
     if ((socket_idx  < 0) && (vhost_user_enabled)) {
+        printf("You have not specified parameter \"-s\"\n");
         goto error_args;
     }
 
@@ -232,16 +274,18 @@ int main(int argc, char **argv)
     /* Initialize the virtio/vhost-user device */
     switch (device_id) {
     case 1:
-        virtio_rng_realize(); /* <-- Enable that for simple rng */
+        virtio_rng_realize();
         break;
     case 2:
-        vhost_user_rng_realize(); /* <-- Enable that for vhost-user-rng */
+        vhost_user_rng_realize();
         break;
     case 3:
-        vhost_user_blk_realize(); /* <-- Enable that for vhost-user-blk */
+        get_queue_num_size_args(argc, argv, &queue_num, &queue_size);
+        printf("Running vhublk with num %d and size %d\n",
+                                            queue_num, queue_size);
+        vhost_user_blk_realize(queue_num, queue_size);
         break;
     case 4:
-        /* Enable that for vhost-user-rng */
         vhost_user_input_init(global_vdev);
         virtio_input_device_realize();
         break;

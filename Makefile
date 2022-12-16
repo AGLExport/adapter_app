@@ -20,8 +20,8 @@
 
 #CFLAGS := -Wall -Wextra -Werror
 #CFLAGS := -Wall -Wextra -Wno-unused-variable -Wno-unused-function
-CFLAGS := -Wno-unused-variable -Wno-unused-function
-CFLAGS =
+CFLAGS := -Wno-unused-variable -Wno-unused-function -D_GNU_SOURCE
+CFLAGS = -D_GNU_SOURCE -O2
 CC ?=
 
 ifeq ($(ARCH), arm64)

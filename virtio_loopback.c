@@ -1327,7 +1327,8 @@ void virtio_loopback_update_irq(VirtIODevice *vdev)
     DBG("Trigger interrupt (ioctl)\n");
     DBG("Interrupt counter: %d\n", int_count++);
 
-    (void)pthread_create(&my_thread_id, NULL, my_notify, NULL);
+    //(void)pthread_create(&my_thread_id, NULL, my_notify, NULL);
+    (void) ioctl(fd, IRQ, &irq_num);
 
 }
 
@@ -1767,6 +1768,8 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
 
             uint64_t desc_addr;
             uint32_t vqs_size = get_vqs_max_size(global_vdev);
+
+            ioctl(fd, SHARE_VQS, &vdev->queue_sel);
 
             desc_addr = (uint64_t)mmap(NULL, vqs_size,
                                        PROT_READ | PROT_WRITE,

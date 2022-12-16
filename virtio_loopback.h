@@ -149,7 +149,8 @@
 #define VIRT_VENDOR 0x554D4551 /* 'QEMU' */
 
 #define VIRTQUEUE_MAX_SIZE 1024
-#define VIRTIO_QUEUE_MAX 1024
+#define VIRTIO_QUEUE_MAX VIRTQUEUE_MAX_SIZE
+
 #define VIRTIO_NO_VECTOR 0xffff
 #define TYPE_VIRTIO_DEVICE "virtio-device"
 
@@ -163,7 +164,7 @@
 #define START_LOOPBACK _IOC(_IOC_WRITE, 'k', 3, \
                             sizeof(virtio_device_info_struct_t))
 #define IRQ _IOC(_IOC_WRITE, 'k', 4, sizeof(int))
-#define SHARE_VQS _IOC(_IOC_WRITE, 'k', 5, 0)
+#define SHARE_VQS _IOC(_IOC_WRITE, 'k', 5, sizeof(uint32_t))
 #define SHARE_BUF _IOC(_IOC_WRITE, 'k', 6, sizeof(uint64_t))
 #define USED_INFO _IOC(_IOC_WRITE, 'k', 7, 0)
 #define DATA_INFO _IOC(_IOC_WRITE, 'k', 8, 0)

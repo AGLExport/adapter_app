@@ -47,6 +47,8 @@
 
 
 #define REALIZE_CONNECTION_RETRIES 3
+static uint64_t vhost_user_blk_get_features(VirtIODevice *vdev,
+                                            uint64_t features);
 
 static int vhost_user_blk_start(VirtIODevice *vdev)
 {
@@ -223,7 +225,7 @@ static int vhost_user_blk_connect(VirtIODevice *vdev)
     vhost_dev_init(s->vhost_dev);
 
     /* Pass the new obtained features */
-    global_vdev->host_features = global_vdev->vhublk->vhost_dev->features;
+    global_vdev->host_features = s->vhost_dev->features;
 
     /* Disable VIRTIO_RING_F_INDIRECT_DESC, to be supported in future release */
     global_vdev->host_features &= ~(1ULL << VIRTIO_RING_F_INDIRECT_DESC);
@@ -468,7 +470,7 @@ void print_config(uint8_t *config)
     DBG("uint8_t unused1[3]: %u\n", config_strct->unused1[2]);
 }
 
-void vhost_user_blk_realize(void)
+void vhost_user_blk_realize(int queue_num, int queue_size)
 {
     int retries;
     int i, ret;
@@ -487,12 +489,13 @@ void vhost_user_blk_realize(void)
 
     vhost_user_blk_init(global_vdev);
 
-    global_vdev->vhublk->config_wce = 1;
+    global_vdev->vhublk->config_wce = 0;
+
     /* FIXME: We temporarily hardcoded the vrtqueues number */
-    global_vdev->vhublk->num_queues = 1;
+    global_vdev->vhublk->num_queues = queue_num;
 
     /* FIXME: We temporarily hardcoded the vrtqueues size */
-    global_vdev->vhublk->queue_size = 128;
+    global_vdev->vhublk->queue_size = queue_size;
 
     /* NOTE: global_vdev->vqs == vhublk->virtqs */
     global_vdev->vqs = (VirtQueue **)malloc(sizeof(VirtQueue *)
