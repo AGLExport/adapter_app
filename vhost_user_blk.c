@@ -489,7 +489,7 @@ void vhost_user_blk_realize(int queue_num, int queue_size)
 
     vhost_user_blk_init(global_vdev);
 
-    global_vdev->vhublk->config_wce = 0;
+    global_vdev->vhublk->config_wce = 1;
 
     /* FIXME: We temporarily hardcoded the vrtqueues number */
     global_vdev->vhublk->num_queues = queue_num;

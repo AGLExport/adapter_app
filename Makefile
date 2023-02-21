@@ -65,7 +65,7 @@ all: $(BINS)
 
 $(BINS): $(OBJS)
 	@echo -e "CC\t$@"
-	$(CC) $(CFLAGS) $(INCL) $^ -o $@ -lpthread -static
+	$(CC) $(CFLAGS) $(INCL) $^ -o $@ -lpthread
 
 %.o: %.c
 	@echo -e "CC\t$@"

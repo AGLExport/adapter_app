@@ -1415,7 +1415,7 @@ uint32_t virtio_config_readw(VirtIODevice *vdev, uint32_t addr)
 
     k->get_config(vdev, vdev->config);
 
-    memcpy(&val, (uint16_t *)(vdev->config + addr), sizeof(uint64_t));
+    memcpy(&val, (uint16_t *)(vdev->config + addr), sizeof(uint16_t));
     return val;
 }
 
