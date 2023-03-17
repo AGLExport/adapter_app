@@ -2122,8 +2122,8 @@ int virtio_loopback_start(void)
      */
     (void)ioctl(fd, EFD_INIT, &info);
 
-    /* Map notification mechanism */
-    /* Multiple mmaps: /dev/loopback-0/vqs, /dev/loopback-0/ctlr */
+    /* Map communication mechanism */
+    (void)ioctl(fd, SHARE_COM_STRUCT);
     address = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (address == MAP_FAILED) {
         perror("mmap operation failed");

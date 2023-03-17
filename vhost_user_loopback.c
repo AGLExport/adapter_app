@@ -1273,8 +1273,6 @@ void find_add_new_reg(struct vhost_dev *dev)
     int sglist_elem_num;
     int i;
 
-    (void)ioctl(loopback_fd, BARRIER);
-
     DBG("Total nvqs: %d\n", dev->nvqs);
     for (int i = 0; i < dev->nvqs; i++) {
 
