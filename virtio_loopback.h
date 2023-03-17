@@ -166,10 +166,8 @@
 #define IRQ _IOC(_IOC_WRITE, 'k', 4, sizeof(int))
 #define SHARE_VQS _IOC(_IOC_WRITE, 'k', 5, sizeof(uint32_t))
 #define SHARE_BUF _IOC(_IOC_WRITE, 'k', 6, sizeof(uint64_t))
-#define USED_INFO _IOC(_IOC_WRITE, 'k', 7, 0)
-#define DATA_INFO _IOC(_IOC_WRITE, 'k', 8, 0)
+#define SHARE_COM_STRUCT _IOC(_IOC_WRITE, 'k', 7, 0)
 #define MAP_BLK _IOC(_IOC_WRITE, 'k', 9, 0)
-#define BARRIER _IOC(_IOC_WRITE, 'k', 10, 0)
 
 #define VIRTIO_PCI_VRING_ALIGN         4096
 
