@@ -54,13 +54,11 @@ typedef struct VirtIOInput {
     QTAILQ_HEAD(, VirtIOInputConfig)  cfg_list;
     VirtQueue                         *evt, *sts;
     char                              *serial;
-
     struct {
         virtio_input_event event;
         VirtQueueElement *elem;
     }                                 *queue;
     uint32_t                          qindex, qsize;
-
     bool                              active;
 
 } VirtIOInput;

@@ -352,6 +352,7 @@ int vhost_user_set_features(struct vhost_dev *dev,
     (void) dev;
 
     /* Pass hdev as parameter! */
+    DBG("vhost_user_set_features: 0x%lx\n", features);
     return vhost_user_set_u64(VHOST_USER_SET_FEATURES, features,
                               log_enabled);
 }

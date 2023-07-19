@@ -92,6 +92,13 @@ static struct vhost_dev *vhost_input_get_vhost(VirtIODevice *vdev)
     return vdev->vhuinput->vhost_dev;
 }
 
+static void print_config_input(uint8_t *config_data)
+{
+    struct virtio_input_config *config_strct =
+        (struct virtio_input_config *)config_data;
+    DBG("print_config_input: Not yet implemented\n");
+}
+
 static void vhost_input_class_init(VirtIODevice *vdev)
 {
     DBG("vhost_input_class_init(...)\n");
@@ -100,13 +107,12 @@ static void vhost_input_class_init(VirtIODevice *vdev)
     /* Comment out the following lines to get the local config */
     vdev->vdev_class->get_config = vhost_input_get_config;
     vdev->vdev_class->set_config = vhost_input_set_config;
-
     vdev->vdev_class->get_vhost = vhost_input_get_vhost;
-
     vdev->vhuinput->vdev_input->input_class->realize = vhost_user_input_realize;
     vdev->vhuinput->vdev_input->input_class->change_active =
                                             vhost_input_change_active;
     vdev->vdev_class->update_mem_table = update_mem_table;
+    vdev->vdev_class->print_config = print_config_input;
 }
 
 

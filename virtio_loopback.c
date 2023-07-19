@@ -60,9 +60,6 @@
 #include <pthread.h>
 #include <limits.h>
 
-/* TODO: Deleteit, only for testing */
-#include <linux/virtio_blk.h>
-
 #ifdef DEBUG
 #define DBG(...) printf("virtio-loopback: " __VA_ARGS__)
 #else
@@ -936,9 +933,9 @@ err:
 void print_neg_flag(uint64_t neg_flag, bool read)
 {
     if (read) {
-        DBG("Read:\n\t");
+        DBG("Read:\n");
     } else {
-        DBG("Write:\n\t");
+        DBG("Write:\n");
     }
 
     switch (neg_flag) {
@@ -1043,8 +1040,6 @@ void print_neg_flag(uint64_t neg_flag, bool read)
         }
         return;
     }
-
-
 }
 
 int virtio_set_features_nocheck(VirtIODevice *vdev, uint64_t val)
@@ -1053,7 +1048,7 @@ int virtio_set_features_nocheck(VirtIODevice *vdev, uint64_t val)
 
     val &= vdev->host_features;
 
-    vdev->guest_features = val;
+    vdev->guest_features |= val;
     return bad ? -1 : 0;
 }
 
@@ -1385,7 +1380,6 @@ void virtio_queue_notify(VirtIODevice *vdev, int n)
     }
 }
 
-
 uint32_t virtio_config_readb(VirtIODevice *vdev, uint32_t addr)
 {
     VirtioDeviceClass *k = vdev->vdev_class;
@@ -1491,8 +1485,6 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
 
     uint64_t ret;
 
-    print_neg_flag(offset, 1);
-
     if (!vdev) {
         /*
          * If no backend is present, we treat most registers as
@@ -1522,9 +1514,6 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
     if (offset >= VIRTIO_MMIO_CONFIG) {
         offset -= VIRTIO_MMIO_CONFIG;
 
-        /* TODO: To be implemented */
-        DBG("VIRTIO_MMIO_CONFIG: size: %u, offset: %lu\n", size, offset);
-
         if (proxy->legacy) {
             switch (size) {
             case 1:
@@ -1539,7 +1528,7 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
             default:
                 abort();
             }
-            DBG("VIRTIO_MMIO_CONFIG: ret: %lu\n", ret);
+            DBG("ret: %lu\n", ret);
             return ret;
         }
 
@@ -1567,13 +1556,11 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
     case VIRTIO_MMIO_DEVICE_FEATURES:
         if (proxy->legacy) {
             if (proxy->host_features_sel) {
-                DBG("attempt to read host features with "
-                       "host_features_sel > 0 in legacy mode\n");
-                DBG("vdev->host_features: 0x%lx\n", vdev->host_features);
-                return 0;
+                DBG("vdev->host_features: 0x%lx\n", (vdev->host_features >> 32));
+                return (vdev->host_features >> 32);
             } else {
-                DBG("vdev->host_features: 0x%lx\n", vdev->host_features);
-                return vdev->host_features;
+                DBG("vdev->host_features: 0x%lx\n", vdev->host_features & (uint64_t)(((1ULL << 32) - 1)));
+                return (vdev->host_features & (uint64_t)(((1ULL << 32) - 1)));
             }
         } else {
              /* TODO: To be implemented */
@@ -1648,8 +1635,6 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
                        uint64_t value, unsigned size)
 {
 
-    print_neg_flag(offset, 0);
-
     if (!vdev) {
         /*
          * If no backend is present, we just make all registers
@@ -1661,9 +1646,6 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
 
     if (offset >= VIRTIO_MMIO_CONFIG) {
         offset -= VIRTIO_MMIO_CONFIG;
-
-        /* TODO: To be implemented */
-        DBG("VIRTIO_MMIO_CONFIG flag write\n");
 
         if (proxy->legacy) {
             switch (size) {
@@ -1682,7 +1664,6 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
             }
             return;
         }
-        DBG("write: VIRTIO_MMIO_CONFIG\n");
 
         return;
     }
@@ -1703,7 +1684,8 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
             if (proxy->guest_features_sel) {
                 DBG("attempt to write guest features with "
                        "guest_features_sel > 0 in legacy mode\n");
-                DBG("Set driver features: 0x%lx\n", value);
+                DBG("Set driver features: 0x%lx\n", value << 32);
+                virtio_set_features(vdev, value << 32);
             } else {
                 DBG("Set driver features: 0x%lx\n", value);
                 virtio_set_features(vdev, value);
@@ -1735,6 +1717,7 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         }
         break;
     case VIRTIO_MMIO_QUEUE_NUM:
+        DBG("VIRTIO_MMIO_QUEUE_NUM: %lu\n", value);
 
         virtio_queue_set_num(vdev, vdev->queue_sel, value);
 
@@ -1900,6 +1883,7 @@ void adapter_read_write_cb(void)
      *
      * print_neg_flag (address->notification, address->read);
      */
+    print_neg_flag (address->notification, address->read);
 
     if (address->read) {
         address->data = virtio_loopback_read(global_vdev,

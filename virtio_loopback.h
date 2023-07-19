@@ -563,6 +563,7 @@ typedef struct VirtioDeviceClass {
     bool (*primary_unplug_pending)(void *opaque);
 
     void (*update_mem_table)(VirtIODevice *vdev);
+    void (*print_config)(uint8_t *config_data);
 
     struct vhost_dev *(*get_vhost)(VirtIODevice *vdev);
 } VirtioDeviceClass;

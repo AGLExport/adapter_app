@@ -76,6 +76,7 @@ static int vhost_user_blk_start(VirtIODevice *vdev)
     }
 
     s->vhost_dev->acked_features = vdev->guest_features;
+    DBG("acked_features: 0x%lx\n", vdev->guest_features);
 
     /* FIXME: We might do not need that */
     ret = vhost_dev_prepare_inflight(s->vhost_dev, vdev);
@@ -140,7 +141,6 @@ static int vhost_user_blk_handle_config_change(struct vhost_dev *dev)
     ret = vhost_dev_get_config(dev, (uint8_t *)&blkcfg,
                                sizeof(struct virtio_blk_config));
     if (ret < 0) {
-        DBG("vhost_dev_get_config\n");
         return ret;
     }
 
@@ -227,8 +227,10 @@ static int vhost_user_blk_connect(VirtIODevice *vdev)
     /* Pass the new obtained features */
     global_vdev->host_features = s->vhost_dev->features;
 
-    /* Disable VIRTIO_RING_F_INDIRECT_DESC, to be supported in future release */
-    global_vdev->host_features &= ~(1ULL << VIRTIO_RING_F_INDIRECT_DESC);
+    /*
+     * The next line disables VIRTIO_RING_F_INDIRECT_DESC:
+     * global_vdev->host_features &= ~(1ULL << VIRTIO_RING_F_INDIRECT_DESC);
+     */
 
     DBG("After init global_vdev->host_features: 0x%lx\n",
                                 global_vdev->host_features);
@@ -323,14 +325,6 @@ static void vhost_user_blk_set_config(VirtIODevice *vdev, const uint8_t *config)
 
     DBG("vhost_user_blk_set_config(...)\n");
 
-
-    /*
-     * TODO: Disabled for the current release
-     * if (blkcfg->wce == s->blkcfg.wce) {
-     *     DBG("blkcfg->wce == s->blkcfg.wce\n");
-     *     return;
-     * }
-     */
     if (blkcfg->wce == s->blkcfg.wce) {
         DBG("blkcfg->wce == s->blkcfg.wce\n");
         return;
@@ -383,54 +377,10 @@ static void vhost_user_blk_set_status(VirtIODevice *vdev, uint8_t status)
     DBG("vhost_user_blk_set_status return successfully\n");
 }
 
-
-static void virtio_dev_class_init(VirtIODevice *vdev)
+static void print_config_blk(uint8_t *config_data)
 {
-    DBG("virtio_dev_class_init\n");
-
-    vdev->vdev_class = (VirtioDeviceClass *)malloc(sizeof(VirtioDeviceClass));
-    vdev->vdev_class->parent = vdev;
-    vdev->vdev_class->realize = vhost_user_blk_realize;
-    vdev->vdev_class->unrealize = vhost_user_blk_device_unrealize;
-    vdev->vdev_class->get_config = vhost_user_blk_update_config;
-    vdev->vdev_class->set_config = vhost_user_blk_set_config;
-    vdev->vdev_class->get_features = vhost_user_blk_get_features;
-    vdev->vdev_class->set_status = vhost_user_blk_set_status;
-    vdev->vdev_class->reset = vhost_user_blk_reset;
-    vdev->vdev_class->update_mem_table = update_mem_table;
-}
-
-
-void vhost_user_blk_init(VirtIODevice *vdev)
-{
-
-    DBG("vhost_user_blk_init\n");
-
-    VHostUserBlk *vhublk = (VHostUserBlk *)malloc(sizeof(VHostUserBlk));
-    vdev->vhublk = vhublk;
-    vdev->nvqs = &dev->nvqs;
-    vhublk->parent = vdev;
-    vhublk->virtqs = vdev->vqs;
-    vhublk->vhost_dev = dev;
-
-    virtio_dev_class_init(vdev);
-    virtio_loopback_bus_init(vdev->vbus);
-}
-
-
-static void vhost_user_blk_handle_output(VirtIODevice *vdev, VirtQueue *vq)
-{
-    /*
-     * Not normally called; it's the daemon that handles the queue;
-     * however virtio's cleanup path can call this.
-     */
-    DBG("vhost_user_blk_handle_output not yet implemented\n");
-}
-
-
-void print_config(uint8_t *config)
-{
-    struct virtio_blk_config *config_strct = (struct virtio_blk_config *)config;
+    struct virtio_blk_config *config_strct =
+        (struct virtio_blk_config *)config_data;
 
     DBG("uint64_t capacity: %llu\n", config_strct->capacity);
     DBG("uint32_t size_max: %u\n", config_strct->size_max);
@@ -470,6 +420,48 @@ void print_config(uint8_t *config)
     DBG("uint8_t unused1[3]: %u\n", config_strct->unused1[2]);
 }
 
+static void virtio_dev_class_init(VirtIODevice *vdev)
+{
+    DBG("virtio_dev_class_init\n");
+
+    vdev->vdev_class = (VirtioDeviceClass *)malloc(sizeof(VirtioDeviceClass));
+    vdev->vdev_class->parent = vdev;
+    vdev->vdev_class->realize = vhost_user_blk_realize;
+    vdev->vdev_class->unrealize = vhost_user_blk_device_unrealize;
+    vdev->vdev_class->get_config = vhost_user_blk_update_config;
+    vdev->vdev_class->set_config = vhost_user_blk_set_config;
+    vdev->vdev_class->get_features = vhost_user_blk_get_features;
+    vdev->vdev_class->set_status = vhost_user_blk_set_status;
+    vdev->vdev_class->reset = vhost_user_blk_reset;
+    vdev->vdev_class->update_mem_table = update_mem_table;
+    vdev->vdev_class->print_config = print_config_blk;
+}
+
+void vhost_user_blk_init(VirtIODevice *vdev)
+{
+
+    DBG("vhost_user_blk_init\n");
+
+    VHostUserBlk *vhublk = (VHostUserBlk *)malloc(sizeof(VHostUserBlk));
+    vdev->vhublk = vhublk;
+    vdev->nvqs = &dev->nvqs;
+    vhublk->parent = vdev;
+    vhublk->virtqs = vdev->vqs;
+    vhublk->vhost_dev = dev;
+
+    virtio_dev_class_init(vdev);
+    virtio_loopback_bus_init(vdev->vbus);
+}
+
+static void vhost_user_blk_handle_output(VirtIODevice *vdev, VirtQueue *vq)
+{
+    /*
+     * Not normally called; it's the daemon that handles the queue;
+     * however virtio's cleanup path can call this.
+     */
+    DBG("vhost_user_blk_handle_output not yet implemented\n");
+}
+
 void vhost_user_blk_realize(int queue_num, int queue_size)
 {
     int retries;
@@ -491,10 +483,8 @@ void vhost_user_blk_realize(int queue_num, int queue_size)
 
     global_vdev->vhublk->config_wce = 1;
 
-    /* FIXME: We temporarily hardcoded the vrtqueues number */
     global_vdev->vhublk->num_queues = queue_num;
 
-    /* FIXME: We temporarily hardcoded the vrtqueues size */
     global_vdev->vhublk->queue_size = queue_size;
 
     /* NOTE: global_vdev->vqs == vhublk->virtqs */
@@ -525,9 +515,6 @@ void vhost_user_blk_realize(int queue_num, int queue_size)
     DBG("final global_vdev->host_features: 0x%lx\n",
          global_vdev->host_features);
 
-    print_config((uint8_t *)(&global_vdev->vhublk->blkcfg));
-
-    return;
-
+    print_config_blk((uint8_t *)(&global_vdev->vhublk->blkcfg));
 }
 
