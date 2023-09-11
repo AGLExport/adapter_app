@@ -1981,14 +1981,14 @@ void virtio_loopback_bus_init(VirtioBus *k)
 }
 
 
-int virtio_loopback_start(void)
+int virtio_loopback_start(char *loopback_str)
 {
     efd_data_t info;
     pthread_t thread_id;
     int ret = -1;
     int flags;
 
-    fd = open("/dev/loopback", O_RDWR);
+    fd = open(loopback_str, O_RDWR);
     if (fd < 0) {
         perror("Open call failed");
         return -1;

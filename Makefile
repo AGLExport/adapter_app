@@ -26,9 +26,9 @@ CC ?=
 
 ifeq ($(ARCH), arm64)
  # arm64
- CC ?= aarch64-linux-gnu-gcc
+ CC = aarch64-linux-gnu-gcc
 else
- CC ?= gcc
+ CC = gcc
 endif
 
 INCL += -I .

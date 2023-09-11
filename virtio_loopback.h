@@ -586,7 +586,7 @@ void virtio_notify_config(VirtIODevice *vdev);
 void create_rng_struct(void);
 void print_neg_flag(uint64_t neg_flag, bool read);
 void adapter_read_write_cb(void);
-int virtio_loopback_start(void);
+int virtio_loopback_start(char *loopback_str);
 
 int virtio_queue_ready(VirtQueue *vq);
 void virtqueue_get_avail_bytes(VirtQueue *vq, unsigned int *in_bytes,

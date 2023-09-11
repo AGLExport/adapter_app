@@ -222,10 +222,11 @@ void get_queue_num_size_args(int argc, char **argv,
 
 int main(int argc, char **argv)
 {
-    int socket_idx, device_idx, device_id;
+    int socket_idx, device_idx, device_id, loopback_id, loopback_idx;
     bool vhost_user_enabled;
     /* Assign default queue num and size */
     int queue_num = 1, queue_size = 64;
+    char loopback_str[100];
 
     /*
      * Check if the user has provided all the required arguments.
@@ -301,10 +302,24 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    /* Check if a loopback is needed and provided */
+    loopback_idx = find_arg(argc, argv, "-l");
+
+    if (loopback_idx  < 0) {
+        printf("You have not specified parameter \"-l\"\n");
+        printf("\tWe set /dev/loopback-0 as default\n");
+        loopback_id = 0;
+    } else {
+        loopback_id = atoi(argv[loopback_idx]);
+        sprintf(loopback_str, "/dev/loopback-%d", loopback_id);
+        printf("loopback_idx: %d, loopback_id: %d, loopback_str: %s\n", 
+                                    loopback_idx, loopback_id, loopback_str);
+    }
+
     /*
      * Start loopback trasnport layer and communiation with the loopback driver
      */
-    virtio_loopback_start();
+    virtio_loopback_start(loopback_str);
 
     return 0;
 
