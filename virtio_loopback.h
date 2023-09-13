@@ -148,7 +148,7 @@
 #define VIRT_VERSION_LEGACY 1
 #define VIRT_VENDOR 0x554D4551 /* 'QEMU' */
 
-#define VIRTQUEUE_MAX_SIZE 1024
+#define VIRTQUEUE_MAX_SIZE 64
 #define VIRTIO_QUEUE_MAX VIRTQUEUE_MAX_SIZE
 
 #define VIRTIO_NO_VECTOR 0xffff
@@ -167,7 +167,7 @@
 #define SHARE_VQS _IOC(_IOC_WRITE, 'k', 5, sizeof(uint32_t))
 #define SHARE_BUF _IOC(_IOC_WRITE, 'k', 6, sizeof(uint64_t))
 #define SHARE_COM_STRUCT _IOC(_IOC_WRITE, 'k', 7, 0)
-#define MAP_BLK _IOC(_IOC_WRITE, 'k', 9, 0)
+#define SHARE_NOTIFIED_VQ_INDEX _IOC(_IOC_WRITE, 'k', 8, sizeof(int32_t))
 
 #define VIRTIO_PCI_VRING_ALIGN         4096
 
@@ -193,6 +193,9 @@ typedef struct VirtIOMMIOProxy {
 #define VRING_DESC_F_WRITE  2
 /* This means the buffer contains a list of buffer descriptors. */
 #define VRING_DESC_F_INDIRECT   4
+/* Reset vrings value */
+#define VIRTIO_F_RING_RESET 40
+
 
 /*
  * Mark a descriptor as available or used in packed ring.
@@ -393,6 +396,7 @@ typedef struct VirtIODevice {
     char *bus_name;
     uint8_t device_endian;
     bool use_guest_notifier_mask;
+    /* TODO: Switch to union? */
     VirtIORNG *vrng;
     VirtIOInput *vinput;
     VHostUserRNG *vhrng;
@@ -588,6 +592,7 @@ void virtqueue_get_avail_bytes(VirtQueue *vq, unsigned int *in_bytes,
 void virtio_add_feature(uint64_t *features, unsigned int fbit);
 bool virtio_has_feature(uint64_t features, unsigned int fbit);
 bool virtio_device_started(VirtIODevice *vdev, uint8_t status);
+bool virtio_device_should_start(VirtIODevice *vdev, uint8_t status);
 
 int virtio_queue_empty(VirtQueue *vq);
 void *virtqueue_pop(VirtQueue *vq, size_t sz);
@@ -646,6 +651,7 @@ uint32_t get_vqs_max_size(VirtIODevice *vdev);
 #define VIRTIO_CONFIG_S_DRIVER_OK        4
 #define VIRTIO_F_VERSION_1               32
 #define VIRTIO_F_ACCESS_PLATFORM         33
+
 /*
  * Legacy name for VIRTIO_F_ACCESS_PLATFORM
  * (for compatibility with old userspace)
@@ -678,6 +684,19 @@ uint32_t get_vqs_max_size(VirtIODevice *vdev);
 
 /* Check if pointer p is n-bytes aligned */
 #define QEMU_PTR_IS_ALIGNED(p, n) QEMU_IS_ALIGNED((uintptr_t)(p), (n))
+
+/*
+ * Define 1 GB offset in order to request big enough
+ * memory blocks from the kernel:
+ * 0x40000000 = 1024 * 1024 * 1024 = 64 * 4096 * 4096 = 1G
+ */
+#define OFFSET_1GB 64ULL * PAGE_SIZE * PAGE_SIZE
+
+/*
+ * Define starting physical address of host memory address space
+ */
+#define INIT_PA 0
+
 
 extern VirtIODevice *global_vdev;
 extern VirtIOMMIOProxy *proxy;

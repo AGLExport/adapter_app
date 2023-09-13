@@ -102,7 +102,7 @@ static int vhost_user_blk_start(VirtIODevice *vdev)
     DBG("After vhost_dev_set_inflight\n");
 
 
-    ret = vhost_dev_start(s->vhost_dev, vdev);
+    ret = vhost_dev_start(s->vhost_dev, vdev, false);
     if (ret < 0) {
         DBG("Error starting vhost\n");
         return ret;

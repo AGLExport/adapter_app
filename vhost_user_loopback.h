@@ -66,6 +66,7 @@ struct vhost_virtqueue {
     unsigned long long used_phys;
     unsigned used_size;
     EventNotifier masked_notifier;
+    EventNotifier masked_config_notifier;
     struct vhost_dev *dev;
 };
 
@@ -119,7 +120,7 @@ struct vhost_dev {
 };
 
 
-#define VHOST_USER_MAX_RAM_SLOTS 512
+#define VHOST_USER_MAX_RAM_SLOTS 8
 
 typedef uint64_t ram_addr_t;
 typedef struct RAMBlock RAMBlock;
@@ -244,7 +245,7 @@ extern struct vhost_user *vudev;
 /* Based on qemu/hw/virtio/vhost-user.c */
 #define VHOST_USER_F_PROTOCOL_FEATURES 30
 #define VHOST_LOG_PAGE 4096
-#define VHOST_MEMORY_BASELINE_NREGIONS 8
+#define VHOST_MEMORY_BASELINE_NREGIONS VHOST_USER_MAX_RAM_SLOTS
 
 /* The version of the protocol we support */
 #define VHOST_USER_VERSION    (0x1)
@@ -281,6 +282,7 @@ enum VhostUserProtocolFeature {
     VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD = 12,
     VHOST_USER_PROTOCOL_F_INBAND_NOTIFICATIONS = 14,
     VHOST_USER_PROTOCOL_F_CONFIGURE_MEM_SLOTS = 15,
+    VHOST_USER_PROTOCOL_F_STATUS = 16,
     VHOST_USER_PROTOCOL_F_MAX
 };
 
@@ -325,7 +327,8 @@ typedef enum VhostUserRequest {
     VHOST_USER_GET_MAX_MEM_SLOTS = 36,
     VHOST_USER_ADD_MEM_REG = 37,
     VHOST_USER_REM_MEM_REG = 38,
-    VHOST_USER_SHARE_LOOPBACK_FD = 39,
+    VHOST_USER_SET_STATUS = 39,
+    VHOST_USER_GET_STATUS = 40,
     VHOST_USER_MAX
 } VhostUserRequest;
 
@@ -435,6 +438,7 @@ typedef struct VuDevRegion {
     /* Start address of mmaped space. */
     uint64_t mmap_addr;
 } VuDevRegion;
+
 
 typedef struct VuDev VuDev;
 typedef uint64_t (*vu_get_features_cb) (VuDev *dev);
@@ -942,11 +946,15 @@ int vhost_user_get_config(struct vhost_dev *dev, uint8_t *config,
                           uint32_t config_len);
 int vhost_user_set_config(struct vhost_dev *dev, const uint8_t *data,
                           uint32_t offset, uint32_t size, uint32_t flags);
+int vhost_user_set_vring_enable(struct vhost_dev *dev, int enable);
+int vhost_user_dev_start(struct vhost_dev *dev, bool started);
 
 void vhost_commit_init_vqs(struct vhost_dev *dev);
+void vhost_commit_mem_regions(struct vhost_dev *dev);
 void vhost_commit_vqs(struct vhost_dev *dev);
 void find_add_new_reg(struct vhost_dev *dev);
 void print_mem_table(struct vhost_dev *dev);
+void print_vhost_user_messages(int request);
 
 
 /* FIXME: This need to move in a better place */

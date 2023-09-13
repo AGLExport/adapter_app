@@ -21,7 +21,7 @@
 #CFLAGS := -Wall -Wextra -Werror
 #CFLAGS := -Wall -Wextra -Wno-unused-variable -Wno-unused-function
 CFLAGS := -Wno-unused-variable -Wno-unused-function -D_GNU_SOURCE
-CFLAGS = -D_GNU_SOURCE -O2
+CFLAGS = -D_GNU_SOURCE -O2 -static
 CC ?=
 
 ifeq ($(ARCH), arm64)
@@ -29,25 +29,6 @@ ifeq ($(ARCH), arm64)
  CC ?= aarch64-linux-gnu-gcc
 else
  CC ?= gcc
-endif
-
-ifeq ($(VHOST_USER_RNG), 1)
- CFLAGS += -DVHOST_USER_RNG_DEV
- CFLAGS += -DVHOST_USER
-endif
-
-ifeq ($(VHOST_USER_BLK), 1)
- CFLAGS += -DVHOST_USER_BLK_DEV
- CFLAGS += -DVHOST_USER
-endif
-
-ifeq ($(VHOST_USER_INPUT), 1)
- CFLAGS += -DVHOST_USER_INPUT_DEV
- CFLAGS += -DVHOST_USER
-endif
-
-ifeq ($(VIRTIO_RNG), 1)
- CFLAGS += -DVIRTIO_RNG
 endif
 
 INCL += -I .

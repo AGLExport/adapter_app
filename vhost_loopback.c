@@ -148,9 +148,14 @@ static int vhost_virtqueue_set_addr(struct vhost_dev *dev,
 
     memset(&addr, 0, sizeof(struct vhost_vring_addr));
 
-    addr.desc_user_addr = (uint64_t)(unsigned long)vq->desc;
-    addr.avail_user_addr = (uint64_t)(unsigned long)vq->avail;
-    addr.used_user_addr = (uint64_t)(unsigned long)vq->used;
+    addr.desc_user_addr = (uint64_t)(unsigned long)vq->desc_phys;
+    addr.avail_user_addr = (uint64_t)(unsigned long)vq->avail_phys;
+    addr.used_user_addr = (uint64_t)(unsigned long)vq->used_phys;
+
+    DBG("Print physical addresses of vrings:\n");
+    DBG("\tvq->desc_phys: 0x%llx\n", vq->desc_phys);
+    DBG("\tvq->avail_phys: 0x%llx\n", vq->avail_phys);
+    DBG("\tvq->used_phys: 0x%llx\n", vq->used_phys);
 
     addr.index = idx;
     addr.log_guest_addr = vq->used_phys;
@@ -162,6 +167,34 @@ static int vhost_virtqueue_set_addr(struct vhost_dev *dev,
     }
     return r;
 }
+
+uint64_t vhost_get_features(struct vhost_dev *hdev, const int *feature_bits,
+                            uint64_t features)
+{
+    const int *bit = feature_bits;
+    while (*bit != VHOST_INVALID_FEATURE_BIT) {
+        uint64_t bit_mask = (1ULL << *bit);
+        if (!(hdev->features & bit_mask)) {
+            features &= ~bit_mask;
+        }
+        bit++;
+    }
+    return features;
+}
+
+void vhost_ack_features(struct vhost_dev *hdev, const int *feature_bits,
+                        uint64_t features)
+{
+    const int *bit = feature_bits;
+    while (*bit != VHOST_INVALID_FEATURE_BIT) {
+        uint64_t bit_mask = (1ULL << *bit);
+        if (features & bit_mask) {
+            hdev->acked_features |= bit_mask;
+        }
+        bit++;
+    }
+}
+
 
 
 /* Mask/unmask events from this vq. */
@@ -207,6 +240,7 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
     a = virtio_queue_get_desc_addr(vdev, idx);
     if (a == 0) {
         /* Queue might not be ready for start */
+        DBG("Error: Queue might not be ready for start\n");
         return 0;
     }
 
@@ -226,8 +260,8 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
     }
 
     vq->desc_size = s = l = virtio_queue_get_desc_size(vdev, idx);
-    vq->desc_phys = a;
-    vq->desc = (void *)a;
+    vq->desc_phys = vring_phys_addrs[idx] << 12;
+    vq->desc = (void *)virtio_queue_get_desc_addr(vdev, idx);
     if (!vq->desc || l != s) {
         DBG("Error : vq->desc = a\n");
         r = -ENOMEM;
@@ -235,8 +269,9 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
     }
 
     vq->avail_size = s = l = virtio_queue_get_avail_size(vdev, idx);
-    vq->avail_phys = a = virtio_queue_get_avail_addr(vdev, idx);
-    vq->avail = (void *)a;
+    vq->avail_phys = vq->desc_phys + virtio_queue_get_avail_addr(vdev, idx)
+                                   - virtio_queue_get_desc_addr(vdev, idx);
+    vq->avail = (void *)virtio_queue_get_avail_addr(vdev, idx);
     if (!vq->avail || l != s) {
         DBG("Error : vq->avail = a\n");
         r = -ENOMEM;
@@ -244,8 +279,9 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
     }
 
     vq->used_size = s = l = virtio_queue_get_used_size(vdev, idx);
-    vq->used_phys = a = virtio_queue_get_used_addr(vdev, idx);
-    vq->used = (void *)a;
+    vq->used_phys = a = vq->avail_phys + virtio_queue_get_used_addr(vdev, idx)
+                                       - virtio_queue_get_avail_addr(vdev, idx);
+    vq->used = (void *)virtio_queue_get_used_addr(vdev, idx);
     if (!vq->used || l != s) {
         DBG("Error : vq->used = a\n");
         r = -ENOMEM;
@@ -277,12 +313,10 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
      * will do it later.
      */
     if (!vdev->use_guest_notifier_mask) {
-        DBG("!vdev->use_guest_notifier_mask\n");
         /* TODO: check and handle errors. */
         vhost_virtqueue_mask(dev, vdev, idx, false);
     }
 
-    DBG("vhost_virtqueue_start return successfully\n");
     return 0;
 }
 
@@ -294,8 +328,27 @@ void update_mem_table(VirtIODevice *vdev)
     (void)vhost_user_set_mem_table(vdev->vhdev);
 }
 
+static int vhost_dev_set_vring_enable(struct vhost_dev *hdev, int enable)
+{
+    DBG("vhost_dev_set_vring_enable not yet implemented\n");
+
+    /*
+     * For vhost-user devices, if VHOST_USER_F_PROTOCOL_FEATURES has not
+     * been negotiated, the rings start directly in the enabled state, and
+     * .vhost_set_vring_enable callback will fail since
+     * VHOST_USER_SET_VRING_ENABLE is not supported.
+     */
+    if (!virtio_has_feature(hdev->backend_features,
+                            VHOST_USER_F_PROTOCOL_FEATURES)) {
+        DBG("Does not have VHOST_USER_F_PROTOCOL_FEATURES\n");
+        return 0;
+    }
+
+    return vhost_user_set_vring_enable(hdev, enable);
+}
+
 /* Host notifiers must be enabled at this point. */
-int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev)
+int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev, bool vrings)
 {
     int i, r;
 
@@ -312,8 +365,7 @@ int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev)
         DBG("memory_listener_register?\n");
     }
 
-    /* This is used to exhange the loopback_fd to the vhost-user-device */
-    vhost_user_share_fd();
+    vhost_commit_mem_regions(hdev);
 
     for (i = 0; i < hdev->nvqs; ++i) {
         r = vhost_virtqueue_start(hdev,
@@ -324,6 +376,20 @@ int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev)
             DBG("Fail vhost_virtqueue_start\n");
             return r;
         }
+    }
+
+    if (vrings) {
+        r = vhost_dev_set_vring_enable(hdev, true);
+        if (r) {
+            DBG("Fail vhost_dev_set_vring_enable\n");
+            return r;
+        }
+    }
+
+    r = vhost_user_dev_start(hdev, true);
+    if (r) {
+        DBG("Fail vhost_dev_set_vring_enable\n");
+        return r;
     }
 
     return 0;

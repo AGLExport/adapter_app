@@ -29,14 +29,22 @@
 #include "vhost_user_loopback.h"
 #include "virtio_loopback.h"
 
+#define VHOST_INVALID_FEATURE_BIT (0xff)
+#define VHOST_QUEUE_NUM_CONFIG_INR 0
+
 int vhost_dev_enable_notifiers(struct vhost_dev *hdev, VirtIODevice *vdev);
-int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev);
+int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev, bool vrings);
 void vhost_virtqueue_mask(struct vhost_dev *hdev, VirtIODevice *vdev,
                           int n, bool mask);
 int vhost_dev_get_config(struct vhost_dev *hdev, uint8_t *config,
                          uint32_t config_len);
 int vhost_dev_set_config(struct vhost_dev *hdev, const uint8_t *data,
                          uint32_t offset, uint32_t size, uint32_t flags);
+uint64_t vhost_get_features(struct vhost_dev *hdev, const int *feature_bits,
+                            uint64_t features);
+void vhost_ack_features(struct vhost_dev *hdev, const int *feature_bits,
+                        uint64_t features);
+
 /**
  * vhost_dev_set_config_notifier() - register VhostDevConfigOps
  * @hdev: common vhost_dev_structure

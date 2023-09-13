@@ -252,6 +252,8 @@ int vhost_user_get_u64(int request, uint64_t *u64)
         .flags = VHOST_USER_VERSION,
     };
 
+    print_vhost_user_messages(request);
+
     if (vhost_user_one_time_request(request) && dev->vq_index != 0) {
         return 0;
     }
@@ -278,6 +280,7 @@ int vhost_user_get_u64(int request, uint64_t *u64)
     }
 
     *u64 = msg.payload.u64;
+    DBG("\tGet value: 0x%lx\n", msg.payload.u64);
 
     return 0;
 }
@@ -319,6 +322,9 @@ int vhost_user_set_u64(int request, uint64_t u64, bool wait_for_reply)
     };
     int ret;
 
+    print_vhost_user_messages(request);
+    DBG("\tSet value: 0x%lx\n", u64);
+
     if (wait_for_reply) {
         bool reply_supported = virtio_has_feature(dev->protocol_features,
                                           VHOST_USER_PROTOCOL_F_REPLY_ACK);
@@ -352,9 +358,9 @@ int vhost_user_set_features(struct vhost_dev *dev,
     (void) dev;
 
     /* Pass hdev as parameter! */
-    DBG("vhost_user_set_features: 0x%lx\n", features);
-    return vhost_user_set_u64(VHOST_USER_SET_FEATURES, features,
-                              log_enabled);
+    DBG("vhost_user_set_features: 0x%lx\n", features | dev->backend_features);
+    return vhost_user_set_u64(VHOST_USER_SET_FEATURES,
+                              features | dev->backend_features, log_enabled);
 }
 
 int vhost_user_set_protocol_features(uint64_t features)
@@ -445,36 +451,6 @@ int vhost_user_get_vq_index(struct vhost_dev *dev, int idx)
      * assert(idx >= dev->vq_index && idx < dev->vq_index + (int)dev->nvqs);
      */
     return idx;
-}
-
-void vhost_user_share_fd(void)
-{
-    size_t fd_num = 1;
-    VhostUserMsg msg = {
-        .request = (VhostUserRequest) VHOST_USER_SHARE_LOOPBACK_FD,
-        .flags = VHOST_USER_VERSION,
-        .payload.u64 = ((uint64_t)getpid() << 32) | (uint64_t)loopback_fd,
-        .size = sizeof(msg.payload.u64),
-    };
-
-    msg.fd_num = 1;
-    memcpy(msg.fds, &loopback_fd, fd_num * sizeof(int));
-
-    /*
-     * TODO: Check if we need to remove the VHOST_USER_NEED_REPLY_MASK flag
-     *
-     * msg.flags &= ~VHOST_USER_NEED_REPLY_MASK;
-     */
-
-    if (vu_message_write(client_sock, &msg) < 0) {
-        DBG("vhost_user_share_fd -> write failed\n");
-        exit(1);
-    }
-
-    if (msg.flags & VHOST_USER_NEED_REPLY_MASK) {
-        process_message_reply(&msg);
-    }
-
 }
 
 int vhost_set_vring_file(VhostUserRequest request,
@@ -831,8 +807,7 @@ static MemoryRegion *vhost_user_get_mr_data(struct vhost_memory_region *reg,
 {
     MemoryRegion *mr;
 
-    *offset = reg->guest_phys_addr & (PAGE_SIZE - 1);
-
+    *offset = 0;
     *fd = loopback_fd;
 
     return mr;
@@ -849,16 +824,52 @@ static void vhost_user_fill_msg_region(VhostUserMemoryRegion *dst,
     dst->mmap_offset = mmap_offset;
 }
 
-
-
-
 static int vhost_user_fill_set_mem_table_msg(struct vhost_user *u,
                                              struct vhost_dev *dev,
                                              VhostUserMsg *msg,
                                              int *fds, size_t *fd_num,
                                              bool track_ramblocks)
 {
-    DBG("vhost_user_fill_set_mem_table_msg(...) not yet implemented\n");
+    int i, fd;
+    ram_addr_t offset;
+    MemoryRegion *mr;
+    struct vhost_memory_region *reg;
+    VhostUserMemoryRegion region_buffer;
+
+    msg->request = VHOST_USER_SET_MEM_TABLE;
+
+    for (i = 0; i < dev->mem->nregions; ++i) {
+        reg = dev->mem->regions + i;
+
+        mr = vhost_user_get_mr_data(reg, &offset, &fd);
+        if (fd > 0) {
+            if (track_ramblocks) {
+                u->region_rb_offset[i] = offset;
+                u->region_rb[i] = mr->ram_block;
+            } else if (*fd_num == VHOST_MEMORY_BASELINE_NREGIONS) {
+                DBG("Failed preparing vhost-user memory table msg: %d\n", *fd_num);
+                return -1;
+            }
+            vhost_user_fill_msg_region(&region_buffer, reg, offset);
+            msg->payload.memory.regions[*fd_num] = region_buffer;
+            fds[(*fd_num)++] = fd;
+        } else if (track_ramblocks) {
+            u->region_rb_offset[i] = 0;
+            u->region_rb[i] = NULL;
+        }
+    }
+
+    msg->payload.memory.nregions = *fd_num;
+    if (!*fd_num) {
+        DBG("Failed initializing vhost-user memory map, "
+            "consider using -object memory-backend-file share=on\n");
+        return -1;
+    }
+
+    msg->size = sizeof(msg->payload.memory.nregions);
+    msg->size += sizeof(msg->payload.memory.padding);
+    msg->size += *fd_num * sizeof(VhostUserMemoryRegion);
+
     return 1;
 }
 
@@ -981,7 +992,7 @@ static int send_remove_regions(struct vhost_dev *dev,
 
         if (fd > 0) {
             msg->request = VHOST_USER_REM_MEM_REG;
-            vhost_user_fill_msg_region(&region_buffer, shadow_reg, 0);
+            vhost_user_fill_msg_region(&region_buffer, shadow_reg, offset);
             msg->payload.memreg.region = region_buffer;
 
             msg->fd_num = 1;
@@ -1060,7 +1071,6 @@ static int send_add_regions(struct vhost_dev *dev,
             u->region_rb_offset[reg_idx] = 0;
             u->region_rb[reg_idx] = NULL;
         }
-
     }
 
     return 0;
@@ -1116,7 +1126,7 @@ static int vhost_user_set_mem_table_postcopy(struct vhost_dev *dev,
                                              bool reply_supported,
                                              bool config_mem_slots)
 {
-    DBG("vhost_user_set_mem_table_postcopy(...)\n");
+    DBG("vhost_user_set_mem_table_postcopy(...) not yet implemented\n");
     return 0;
 }
 
@@ -1163,20 +1173,23 @@ int vhost_user_set_mem_table(struct vhost_dev *dev)
         }
     } else {
 
-        DBG("To be implemented!\n");
-        exit(1);
-
         if (vhost_user_fill_set_mem_table_msg(u, dev, &msg, fds, &fd_num,
                                               false) < 0) {
+            DBG("vhost_user_fill_set_mem_table_msg error\n");
             return -1;
         }
+
+        /* Update message parameters */
+        DBG("\nfd_num: %d\n", fd_num);
+        msg.fd_num = fd_num;
+        memcpy(msg.fds, fds, fd_num * sizeof(int));
+
         if (vu_message_write(client_sock, &msg) < 0) {
             DBG("vhost_user_set_mem_table failed write msg\n");
             return -1;
         }
 
         if (reply_supported) {
-            DBG("reply is supported\n");
             return process_message_reply(&msg);
         }
     }
@@ -1240,7 +1253,7 @@ static void vhost_add_reg(struct vhost_dev *dev, uint64_t hpa, uint64_t len)
     cur_vmr = dev->mem->regions + (dev->mem->nregions - 1);
     cur_vmr->guest_phys_addr = hpa;
     cur_vmr->memory_size = len;
-    cur_vmr->userspace_addr  = 0;
+    cur_vmr->userspace_addr  = hpa;
     cur_vmr->flags_padding   = 0;
 }
 
@@ -1304,7 +1317,6 @@ void find_add_new_reg(struct vhost_dev *dev)
                 break;
             }
 
-
             DBG("desc[%u] 0x%lx\n", j, desc_addr);
             DBG("desc[%u].addr 0x%lx\n", j, sg_addr);
             DBG("desc[%u].len 0x%lu\n", j, sg_len);
@@ -1335,7 +1347,6 @@ void vhost_commit_init_vqs(struct vhost_dev *dev)
     int sglist_elem_num;
 
     dev->n_mem_sections = dev->nvqs;
-    DBG("dev->n_mem_sections: %d\n", dev->n_mem_sections);
 
     /* Rebuild the regions list from the new sections list */
     regions_size = offsetof(struct vhost_memory, regions) +
@@ -1360,14 +1371,36 @@ void vhost_commit_vqs(struct vhost_dev *dev)
     find_add_new_reg(dev);
 }
 
+void vhost_commit_mem_regions(struct vhost_dev *dev)
+{
+    uint64_t mmap_pa_req;
+    int i;
+
+    /* Create and add all ram memory regions */
+    for (i = 0; i < VHOST_USER_MAX_RAM_SLOTS; i++) {
+
+        /* Calculate new Physical Address */
+        mmap_pa_req = INIT_PA + i * 1 * OFFSET_1GB;
+
+        /* Add a new region */
+        vhost_add_reg(dev, mmap_pa_req, 1 * OFFSET_1GB);
+    }
+
+   /* Send new region */
+   if (vhost_user_set_mem_table(dev) < 0) {
+        DBG("vhost_user_set_mem_table -> Error\n");
+        exit(1);
+   }
+}
 
 /* -------------------- End of Mem regions functions -------------------- */
-
 
 int vhost_user_backend_init(struct vhost_dev *vhdev)
 {
     uint64_t features, protocol_features, ram_slots;
     int err;
+
+    DBG("vhost_user_backend_init (...)\n");
 
     err = vhost_user_get_features(&features);
     if (err < 0) {
@@ -1400,6 +1433,7 @@ int vhost_user_backend_init(struct vhost_dev *vhdev)
 
         if (!vhdev->config_ops ||
                 !vhdev->config_ops->vhost_dev_config_notifier) {
+            DBG("There is no config_ops or vhost_dev_config_notifier\n");
             /* Don't acknowledge CONFIG feature if device doesn't support it */
             dev->protocol_features &= ~(1ULL << VHOST_USER_PROTOCOL_F_CONFIG);
         } else if (!(protocol_features &
@@ -1408,7 +1442,6 @@ int vhost_user_backend_init(struct vhost_dev *vhdev)
                 "but backend does not support it.\n");
             return -EINVAL;
         }
-
 
         err = vhost_user_set_protocol_features(vhdev->protocol_features);
         if (err < 0) {
@@ -1492,7 +1525,7 @@ int vhost_user_backend_init(struct vhost_dev *vhdev)
     return 0;
 }
 
-
+/* TODO: Return an error code */
 void vhost_dev_init(struct vhost_dev *vhdev)
 {
     uint64_t features;
@@ -1552,4 +1585,198 @@ void vhost_dev_init(struct vhost_dev *vhdev)
      */
 
     vhdev->features = features;
+    DBG("vhdev->backend_features 0x%llx\n", vhdev->backend_features);
+    DBG("vhdev->features 0x%llx\n", vhdev->features);
+}
+
+int vhost_user_set_vring_enable(struct vhost_dev *dev, int enable)
+{
+    int i;
+    DBG("vhost_user_set_vring_enable not yet implemented\n");
+
+    if (!virtio_has_feature(dev->features, VHOST_USER_F_PROTOCOL_FEATURES)) {
+        DBG("Does not have VHOST_USER_F_PROTOCOL_FEATURES\n");
+        return -EINVAL;
+    }
+
+    for (i = 0; i < dev->nvqs; ++i) {
+        int ret;
+        struct vhost_vring_state state = {
+            .index = dev->vq_index + i,
+            .num   = enable,
+        };
+
+        ret = vhost_set_vring(dev, VHOST_USER_SET_VRING_ENABLE, &state);
+        if (ret < 0) {
+            /*
+             * Restoring the previous state is likely infeasible, as well as
+             * proceeding regardless the error, so just bail out and hope for
+             * the device-level recovery.
+             */
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
+static int vhost_user_set_status(struct vhost_dev *dev, uint8_t status)
+{
+    return vhost_user_set_u64(VHOST_USER_SET_STATUS, status, false);
+}
+
+static int vhost_user_get_status(struct vhost_dev *dev, uint8_t *status)
+{
+    uint64_t value;
+    int ret;
+
+    ret = vhost_user_get_u64(VHOST_USER_GET_STATUS, &value);
+    if (ret < 0) {
+        return ret;
+    }
+    *status = value;
+
+    return 0;
+}
+
+static int vhost_user_add_status(struct vhost_dev *dev, uint8_t status)
+{
+    uint8_t s;
+    int ret;
+
+    ret = vhost_user_get_status(dev, &s);
+    if (ret < 0) {
+        return ret;
+    }
+
+    if ((s & status) == status) {
+        return 0;
+    }
+    s |= status;
+
+    return vhost_user_set_status(dev, s);
+}
+
+int vhost_user_dev_start(struct vhost_dev *dev, bool started)
+{
+    DBG("vhost_user_dev_start(...)\n");
+    if (!virtio_has_feature(dev->protocol_features,
+                            VHOST_USER_PROTOCOL_F_STATUS)) {
+        DBG("VHOST_USER_PROTOCOL_F_STATUS not in features\n");
+        return 0;
+    }
+
+    /* Set device status only for last queue pair */
+    if (dev->vq_index + dev->nvqs != dev->vq_index_end) {
+        return 0;
+    }
+
+    if (started) {
+        return vhost_user_add_status(dev, VIRTIO_CONFIG_S_ACKNOWLEDGE |
+                                          VIRTIO_CONFIG_S_DRIVER |
+                                          VIRTIO_CONFIG_S_DRIVER_OK);
+    } else {
+        return 0;
+    }
+}
+
+void print_vhost_user_messages(int request)
+{
+    switch (request) {
+    case VHOST_USER_GET_FEATURES:
+        DBG("VHOST_USER_GET_FEATURES\n");
+        break;
+    case VHOST_USER_SET_FEATURES:
+        DBG("VHOST_USER_SET_FEATURES\n");
+        break;
+    case VHOST_USER_GET_PROTOCOL_FEATURES:
+        DBG("VHOST_USER_GET_PROTOCOL_FEATURES\n");
+        break;
+    case VHOST_USER_SET_PROTOCOL_FEATURES:
+        DBG("VHOST_USER_SET_PROTOCOL_FEATURES\n");
+        break;
+    case VHOST_USER_SET_OWNER:
+        DBG("VHOST_USER_SET_OWNER\n");
+        break;
+    case VHOST_USER_RESET_OWNER:
+        DBG("VHOST_USER_RESET_OWNER\n");
+        break;
+    case VHOST_USER_SET_MEM_TABLE:
+        DBG("VHOST_USER_SET_MEM_TABLE\n");
+        break;
+    case VHOST_USER_SET_LOG_BASE:
+        DBG("VHOST_USER_SET_LOG_BASE\n");
+        break;
+    case VHOST_USER_SET_LOG_FD:
+        DBG("VHOST_USER_SET_LOG_FD\n");
+        break;
+    case VHOST_USER_SET_VRING_NUM:
+        DBG("VHOST_USER_SET_VRING_NUM\n");
+        break;
+    case VHOST_USER_SET_VRING_ADDR:
+        DBG("VHOST_USER_SET_VRING_ADDR\n");
+        break;
+    case VHOST_USER_SET_VRING_BASE:
+        DBG("VHOST_USER_SET_VRING_BASE\n");
+        break;
+    case VHOST_USER_GET_VRING_BASE:
+        DBG("VHOST_USER_GET_VRING_BASE\n");
+        break;
+    case VHOST_USER_SET_VRING_KICK:
+        DBG("VHOST_USER_SET_VRING_KICK\n");
+        break;
+    case VHOST_USER_SET_VRING_CALL:
+        DBG("VHOST_USER_SET_VRING_CALL\n");
+        break;
+    case VHOST_USER_SET_VRING_ERR:
+        DBG("VHOST_USER_SET_VRING_ERR\n");
+        break;
+    case VHOST_USER_GET_QUEUE_NUM:
+        DBG("VHOST_USER_GET_QUEUE_NUM\n");
+        break;
+    case VHOST_USER_SET_VRING_ENABLE:
+        DBG("VHOST_USER_SET_VRING_ENABLE\n");
+        break;
+    case VHOST_USER_SET_SLAVE_REQ_FD:
+        DBG("VHOST_USER_SET_SLAVE_REQ_FD\n");
+        break;
+    case VHOST_USER_GET_CONFIG:
+        DBG("VHOST_USER_GET_CONFIG\n");
+        break;
+    case VHOST_USER_SET_CONFIG:
+        DBG("VHOST_USER_SET_CONFIG\n");
+        break;
+    case VHOST_USER_NONE:
+        DBG("VHOST_USER_NONE\n");
+        break;
+    case VHOST_USER_POSTCOPY_ADVISE:
+        DBG("VHOST_USER_POSTCOPY_ADVISE\n");
+        break;
+    case VHOST_USER_POSTCOPY_LISTEN:
+        DBG("VHOST_USER_POSTCOPY_LISTEN\n");
+        break;
+    case VHOST_USER_POSTCOPY_END:
+        DBG("VHOST_USER_POSTCOPY_END\n");
+        break;
+    case VHOST_USER_GET_INFLIGHT_FD:
+        DBG("VHOST_USER_GET_INFLIGHT_FD\n");
+        break;
+    case VHOST_USER_SET_INFLIGHT_FD:
+        DBG("VHOST_USER_SET_INFLIGHT_FD\n");
+        break;
+    case VHOST_USER_VRING_KICK:
+        DBG("VHOST_USER_VRING_KICK\n");
+        break;
+    case VHOST_USER_GET_MAX_MEM_SLOTS:
+        DBG("VHOST_USER_GET_MAX_MEM_SLOTS\n");
+        break;
+    case VHOST_USER_ADD_MEM_REG:
+        DBG("VHOST_USER_ADD_MEM_REG\n");
+        break;
+    case VHOST_USER_REM_MEM_REG:
+        DBG("VHOST_USER_REM_MEM_REG\n");
+        break;
+    default:
+        DBG("Unhandled request: %d\n", request);
+    }
 }

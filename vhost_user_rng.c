@@ -64,8 +64,9 @@ static void vu_rng_start(VirtIODevice *vdev)
     }
 
     rng->vhost_dev->acked_features = vdev->guest_features;
+    DBG("rng->vhost_dev->acked_features: 0x%lx\n", vdev->guest_features);
 
-    ret = vhost_dev_start(rng->vhost_dev, vdev);
+    ret = vhost_dev_start(rng->vhost_dev, vdev, true);
     if (ret < 0) {
         DBG("Error starting vhost-user-rng: %d\n", ret);
         return;
@@ -79,6 +80,9 @@ static void vu_rng_start(VirtIODevice *vdev)
     for (i = 0; i < rng->vhost_dev->nvqs; i++) {
         vhost_virtqueue_mask(rng->vhost_dev, vdev, i, false);
     }
+
+    /* Wait a bit for the vrings to be set in vhost-user-device */
+    sleep(1);
 
 }
 
@@ -190,4 +194,8 @@ void vhost_user_rng_realize(void)
 
     /* Initiale vhost-user communication */
     vhost_dev_init(dev);
+
+    /* Write the final features */
+    global_vdev->host_features = dev->features;
+    DBG("dev->host_features: 0x%lx\n", dev->features);
 }

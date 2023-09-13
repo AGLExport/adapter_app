@@ -182,4 +182,4 @@ void virtio_input_device_realize();
 void vhost_user_input_init(VirtIODevice *vdev);
 void vhost_user_input_realize();
 
-#endif /* VHOST_USER_INPU */
+#endif /* VHOST_USER_INPUT */

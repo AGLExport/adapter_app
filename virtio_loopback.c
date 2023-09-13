@@ -71,7 +71,6 @@
 int s; /* To be deleted */
 int efd; /* Eventfd file descriptor */
 int efd_notify; /* Eventfd file descriptor */
-uint64_t eftd_ctr;
 fd_set rfds;
 int fd;
 int loopback_fd;
@@ -99,6 +98,15 @@ static int virtio_validate_features(VirtIODevice *vdev)
     }
 
     return 0;
+}
+
+bool virtio_device_should_start(VirtIODevice *vdev, uint8_t status)
+{
+    if (!vdev->vm_running) {
+        return false;
+    }
+
+    return virtio_device_started(vdev, status);
 }
 
 bool virtio_device_started(VirtIODevice *vdev, uint8_t status)
@@ -144,7 +152,7 @@ int virtio_set_status(VirtIODevice *vdev, uint8_t val)
         virtio_set_started(vdev, val & VIRTIO_CONFIG_S_DRIVER_OK);
     }
 
-    DBG("set vdev->status :%u \n", vdev->status);
+    DBG("set vdev->status:%u\n", vdev->status);
 
     if (k->set_status) {
         DBG("k->set_status\n");
@@ -524,88 +532,7 @@ static bool virtqueue_map_desc(VirtIODevice *vdev, unsigned int *p_num_sg,
                                unsigned int max_num_sg, bool is_write,
                                uint64_t pa, size_t sz)
 {
-    unsigned num_sg = *p_num_sg;
-    bool ok = false;
-    uint64_t mmap_addr;
-    int ioctl_res;
-
-    if (!sz) {
-        DBG("virtio: zero sized buffers are not allowed\n");
-        goto out;
-    }
-
-    while (sz) {
-        uint64_t len = sz;
-
-        if (num_sg == max_num_sg) {
-            DBG("virtio: too many write descriptors in\n"
-                               "indirect table");
-            goto out;
-        }
-
-        DBG("\tpa address is: 0x%lx\n", pa);
-
-        memcpy(&mmap_addr, &pa, sizeof(uint64_t));
-        ioctl_res = ioctl(loopback_fd, SHARE_BUF, &mmap_addr);
-
-        /* Notify the loopback driver what you want to' mmap' */
-        if (ioctl_res < 0) {
-            DBG("SHARE_BUF failed\n");
-            exit(1);
-        } else {
-            if (mmap_addr == 0) {
-
-                if ((pa & 0xff) == 0) {
-                    ioctl(loopback_fd, MAP_BLK);
-                }
-
-                DBG("Try to mmap pa: 0x%lx, size: %lx\n", pa, len);
-                iov[num_sg].iov_base = mmap(NULL, len, PROT_READ | PROT_WRITE,
-                                            MAP_SHARED, loopback_fd, 0);
-                int retries = 5;
-                while ((retries > 0) && ((int64_t)iov[num_sg].iov_base < 0)) {
-                    iov[num_sg].iov_base = mmap(NULL, len,
-                                                PROT_READ | PROT_WRITE,
-                                                MAP_SHARED, loopback_fd, 0);
-                    retries--;
-                }
-
-                if ((int64_t)iov[num_sg].iov_base < 0) {
-                    DBG("Bad mapping\n");
-                    exit(1);
-                }
-             } else {
-                iov[num_sg].iov_base = (void *)mmap_addr;
-             }
-        }
-
-        /* Fix the offset */
-        iov[num_sg].iov_base += pa & 0xfff;
-        DBG("\tMMap address (iov_base): 0x%lx\n",
-            (uint64_t)iov[num_sg].iov_base);
-
-        /* Update len: Remaining size in the current page */
-        if (sz > PAGE_SIZE - (pa & 0xfff)) {
-            len = PAGE_SIZE - (pa & 0xfff);
-        }
-
-        if (!iov[num_sg].iov_base) {
-            DBG("virtio: bogus descriptor or out of resources\n");
-            goto out;
-        }
-
-        iov[num_sg].iov_len = len;
-        addr[num_sg] = pa;
-
-        sz -= len;
-        pa += len;
-        num_sg++;
-    }
-    ok = true;
-
-out:
-    *p_num_sg = num_sg;
-    return ok;
+    DBG("Not implemented\n");
 }
 
 static void *virtqueue_alloc_element(size_t sz, unsigned out_num,
@@ -1078,16 +1005,11 @@ static void virtio_queue_guest_notifier_read(EventNotifier *n)
     }
 }
 
-
-int eventfd_count = 0;
-
-
-
+int eventfd_count;
 
 void *loopback_event_select(void *_e)
 {
     int retval;
-    uint64_t eftd_ctr;
     fd_set rfds;
     int s;
     EventNotifier *e = (EventNotifier *)_e;
@@ -1286,18 +1208,8 @@ bool virtio_device_disabled(VirtIODevice *vdev)
     return vdev->disabled || vdev->broken;
 }
 
-int prev_level = 0;
-
-void *my_notify(void *data) {
-
-    int irq_num = 44;
-    (void) data;
-    (void) ioctl(fd, IRQ, &irq_num);
-
-    pthread_exit(NULL);
-}
-
-int int_count = 0;
+static int prev_level;
+static int int_count;
 
 void virtio_loopback_update_irq(VirtIODevice *vdev)
 {
@@ -1314,6 +1226,7 @@ void virtio_loopback_update_irq(VirtIODevice *vdev)
     DBG("prev_level: %d\n", prev_level);
 
     if (!((level == 1) && (prev_level == 0))) {
+        DBG("!((level == 1) && (prev_level == 0))\n");
         prev_level = level;
         return;
     }
@@ -1322,12 +1235,11 @@ void virtio_loopback_update_irq(VirtIODevice *vdev)
     DBG("Trigger interrupt (ioctl)\n");
     DBG("Interrupt counter: %d\n", int_count++);
 
-    //(void)pthread_create(&my_thread_id, NULL, my_notify, NULL);
     (void) ioctl(fd, IRQ, &irq_num);
 
 }
 
-bool enable_virtio_interrupt = false;
+bool enable_virtio_interrupt;
 
 /* virtio device */
 void virtio_notify_vector(VirtIODevice *vdev)
@@ -1485,6 +1397,8 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
 
     uint64_t ret;
 
+    DBG("READ\n");
+
     if (!vdev) {
         /*
          * If no backend is present, we treat most registers as
@@ -1544,26 +1458,28 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
     case VIRTIO_MMIO_MAGIC_VALUE:
         return VIRT_MAGIC;
     case VIRTIO_MMIO_VERSION:
+        DBG("VIRTIO_MMIO_VERSION ->\n");
         if (proxy->legacy) {
+            DBG("VIRTIO_MMIO_VERSION -> legacy\n");
             return VIRT_VERSION_LEGACY;
         } else {
+            DBG("VIRTIO_MMIO_VERSION -> version\n");
             return VIRT_VERSION;
         }
     case VIRTIO_MMIO_DEVICE_ID:
         return vdev->device_id;
     case VIRTIO_MMIO_VENDOR_ID:
+        DBG("READ\n");
         return VIRT_VENDOR;
     case VIRTIO_MMIO_DEVICE_FEATURES:
         if (proxy->legacy) {
             if (proxy->host_features_sel) {
-                DBG("vdev->host_features: 0x%lx\n", (vdev->host_features >> 32));
-                return (vdev->host_features >> 32);
+                return vdev->host_features >> 32;
             } else {
-                DBG("vdev->host_features: 0x%lx\n", vdev->host_features & (uint64_t)(((1ULL << 32) - 1)));
-                return (vdev->host_features & (uint64_t)(((1ULL << 32) - 1)));
+                return vdev->host_features & (uint64_t)(((1ULL << 32) - 1));
             }
         } else {
-             /* TODO: To be implemented */
+            /* TODO: To be implemented */
         }
     case VIRTIO_MMIO_QUEUE_NUM_MAX:
         /* TODO: To be implemented */
@@ -1587,6 +1503,7 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
     case VIRTIO_MMIO_INTERRUPT_STATUS:
         return vdev->isr;
     case VIRTIO_MMIO_STATUS:
+        DBG("Read VIRTIO_MMIO_STATUS: %d\n", vdev->status);
         return vdev->status;
     case VIRTIO_MMIO_CONFIG_GENERATION:
         if (proxy->legacy) {
@@ -1629,7 +1546,8 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
 }
 
 uint64_t vring_phys_addrs[2] = {0};
-uint32_t vring_phys_addrs_idx = 0;
+uint32_t vring_phys_addrs_idx;
+static int notify_cnt;
 
 void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
                        uint64_t value, unsigned size)
@@ -1673,6 +1591,7 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
     }
     switch (offset) {
     case VIRTIO_MMIO_DEVICE_FEATURES_SEL:
+        DBG("VIRTIO_MMIO_DEVICE_FEATURES_SEL: 0x%lx\n", value);
         if (value) {
             proxy->host_features_sel = 1;
         } else {
@@ -1771,6 +1690,8 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         /* TODO: To be implemented */
         break;
     case VIRTIO_MMIO_QUEUE_NOTIFY:
+        DBG("\nVIRTIO_MMIO_QUEUE_NOTIFY: vq_index -> %d, notify_cnt: %d\n",
+            value, notify_cnt++);
         if (value < VIRTIO_QUEUE_MAX) {
             virtio_queue_notify(vdev, value);
         }
@@ -1883,7 +1804,7 @@ void adapter_read_write_cb(void)
      *
      * print_neg_flag (address->notification, address->read);
      */
-    print_neg_flag (address->notification, address->read);
+    print_neg_flag(address->notification, address->read);
 
     if (address->read) {
         address->data = virtio_loopback_read(global_vdev,
@@ -1907,7 +1828,9 @@ void *notify_select(void *data)
 {
     int retval;
     fd_set rfds;
+    uint64_t eftd_ctr;
     int efd = *(int *)data;
+    int32_t vq_index;
 
     DBG("\nWaiting for loopback notify events\n");
 
@@ -1924,9 +1847,11 @@ void *notify_select(void *data)
                 DBG("Eventfd read error\n");
                 exit(1);
             } else {
-                //rcu_read_lock();
-                virtio_queue_notify(global_vdev, 0);
-                //rcu_read_unlock();
+                DBG("\nnotify select\n");
+                (void)ioctl(fd, SHARE_NOTIFIED_VQ_INDEX, &vq_index);
+                DBG("\nnotify_select: vq_index -> %d, notify_cnt: %d,"
+                    "eventfd_val: %lu\n\n", vq_index, notify_cnt++, eftd_ctr);
+                virtio_queue_notify(global_vdev, vq_index);
             }
         }
     }
@@ -1935,6 +1860,7 @@ void *notify_select(void *data)
 void *driver_event_select(void *data)
 {
     int retval;
+    uint64_t eftd_ctr;
     int efd = *(int *)data;
 
     DBG("\nWaiting for loopback read/write events\n");
@@ -1990,6 +1916,7 @@ VirtQueue *virtio_add_queue(VirtIODevice *vdev, int queue_size,
     }
 
     if (i == VIRTIO_QUEUE_MAX || queue_size > VIRTQUEUE_MAX_SIZE) {
+        DBG("Error: queue_size > VIRTQUEUE_MAX_SIZE\n");
         exit(1);
     }
 
@@ -2008,12 +1935,15 @@ void virtio_dev_init(VirtIODevice *vdev, const char *name,
 {
     int i;
 
+    DBG("virtio_dev_init\n");
+
     vdev->start_on_kick = false;
     vdev->started = false;
     vdev->device_id = device_id;
     vdev->status = 0;
     vdev->queue_sel = 0;
     vdev->config_vector = VIRTIO_NO_VECTOR;
+    /* TODO: check malloc return value */
     vdev->vq = (VirtQueue *) malloc(sizeof(VirtQueue) * VIRTIO_QUEUE_MAX);
     vdev->vm_running = false;
     vdev->broken = false;
@@ -2033,6 +1963,7 @@ void virtio_dev_init(VirtIODevice *vdev, const char *name,
     }
 
     vdev->use_guest_notifier_mask = true;
+    DBG("virtio_dev_init return\n");
 }
 
 static bool virtio_loopback_ioeventfd_enabled(VirtIODevice *d)
@@ -2065,6 +1996,7 @@ void virtio_loopback_bus_init(VirtioBus *k)
     k->set_guest_notifiers = virtio_loopback_set_guest_notifiers;
     k->ioeventfd_enabled = virtio_loopback_ioeventfd_enabled;
     k->ioeventfd_assign = virtio_loopback_ioeventfd_assign;
+    DBG("virtio_loopback_bus_init(...) return\n");
 }
 
 
@@ -2075,6 +2007,14 @@ int virtio_loopback_start(void)
     pthread_t thread_id_notify;
     int ret = -1;
     int flags;
+
+    /* Initialize global variables */
+    prev_level = 0;
+    int_count = 0;
+    eventfd_count = 0;
+    enable_virtio_interrupt = false;
+    vring_phys_addrs_idx = 0;
+    notify_cnt = 0;
 
     fd = open("/dev/loopback", O_RDWR);
     if (fd < 0) {
@@ -2121,7 +2061,8 @@ int virtio_loopback_start(void)
     }
 
     /* Wait the eventfd */
-    ret = pthread_create(&thread_id_notify, NULL, notify_select, (void *)&efd_notify);
+    ret = pthread_create(&thread_id_notify, NULL, notify_select,
+                        (void *)&efd_notify);
     if (ret != 0) {
         exit(1);
     }

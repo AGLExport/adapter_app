@@ -208,7 +208,7 @@ void vhost_user_backend_start(VirtIODevice *vdev)
     }
 
     vdev->vhuinput->vhost_dev->acked_features = vdev->guest_features;
-    ret = vhost_dev_start(vdev->vhuinput->vhost_dev, vdev);
+    ret = vhost_dev_start(vdev->vhuinput->vhost_dev, vdev, false);
     if (ret < 0) {
         DBG("Error start vhost dev\n");
         return;

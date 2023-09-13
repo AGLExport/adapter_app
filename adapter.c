@@ -3,6 +3,7 @@
  *
  * Authors:
  *  Timos Ampelikiotis <t.ampelikiotis@virtualopensystems.com>
+ *  Stefanos Gerangelos <s.gerangelos@virtualopensystems.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -46,7 +47,6 @@
 #include "vhost_user_rng.h"
 #include "vhost_user_blk.h"
 #include "vhost_user_input.h"
-
 
 #ifdef DEBUG
 #define DBG(...) printf("adapter: " __VA_ARGS__)
@@ -137,7 +137,7 @@ static void help_args(void)
            "\t\t  [ -qn number of queues ]\n"
            "\t\t  [ -qs size of queues ]\n"
            "The 'device_name' can be one of the following:\n"
-           "\tvrng, vhurng, vhublk, vhuinput\n");
+           "\tvrng, vhurng, vhublk, vhuinput, vhusnd, vhugpio\n");
 }
 
 int find_arg(int argc, char **argv, char *str)
@@ -221,14 +221,14 @@ int main(int argc, char **argv)
     int socket_idx, device_idx, device_id;
     bool vhost_user_enabled;
     /* Assign default queue num and size */
-    int queue_num = 1, queue_size = 1024;
+    int queue_num = 1, queue_size = 64;
 
     /*
      * Check if the user has provided all the required arguments.
      * If not, print the help messages.
      */
 
-    if (argc < 5) {
+    if (argc < 3) {
         goto error_args;
     }
 
@@ -249,9 +249,7 @@ int main(int argc, char **argv)
     /* Check if this is a vhost-user device */
     vhost_user_enabled = check_vhu_device(argv[device_idx]);
 
-
     /* Check if a socket is needed and provided */
-
     socket_idx = find_arg(argc, argv, "-s");
 
     if ((socket_idx  < 0) && (vhost_user_enabled)) {
@@ -269,7 +267,6 @@ int main(int argc, char **argv)
 
     /* Initialize the adapter data structures */
     vhost_user_adapter_init();
-
 
     /* Initialize the virtio/vhost-user device */
     switch (device_id) {
