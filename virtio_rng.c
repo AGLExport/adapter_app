@@ -5,7 +5,7 @@
  *  Copyright 2012 Red Hat, Inc.
  *  Copyright 2012 Amit Shah <amit.shah@redhat.com>
  *
- * Copyright 2022 Virtual Open Systems SAS.
+ * Copyright 2022-2023 Virtual Open Systems SAS.
  *
  * This work is licensed under the terms of the GNU GPL, version 2 or
  * (at your option) any later version.  See the COPYING file in the

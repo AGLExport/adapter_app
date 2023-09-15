@@ -18,7 +18,7 @@
  *      Peter Maydell <peter.maydell@linaro.org>
  *
  *
- * Copyright 2022 Virtual Open Systems SAS.
+ * Copyright 2022-2023 Virtual Open Systems SAS.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License; either version 2
@@ -79,6 +79,9 @@ virtio_device_info_struct_t device_info;
 virtio_neg_t *address;
 
 VirtIOMMIOProxy *proxy;
+
+int eventfd_count;
+pthread_mutex_t interrupt_lock;
 
 void virtio_add_feature(uint64_t *features, unsigned int fbit)
 {
@@ -860,9 +863,9 @@ err:
 void print_neg_flag(uint64_t neg_flag, bool read)
 {
     if (read) {
-        DBG("Read:\n");
+        DBG("Read:\t");
     } else {
-        DBG("Write:\n");
+        DBG("Write:\t");
     }
 
     switch (neg_flag) {
@@ -1005,8 +1008,6 @@ static void virtio_queue_guest_notifier_read(EventNotifier *n)
     }
 }
 
-int eventfd_count;
-
 void *loopback_event_select(void *_e)
 {
     int retval;
@@ -1032,14 +1033,19 @@ void *loopback_event_select(void *_e)
         if (retval > 0) {
 
             DBG("\n\nEvent has come from the vhost-user-device "
-                "(eventfd: %d) -> event_count: %d\n\n",
-                                    rfd, eventfd_count);
+                "(eventfd: %d) -> event_count: %d (select value: %d)\n\n",
+                                              rfd, eventfd_count, retval);
 
-            eventfd_count++;
             if (event_notifier_test_and_clear(e)) {
-                virtio_irq(vq);
+                if (pthread_mutex_lock(&interrupt_lock) == 0) {
+                    eventfd_count++;
+                    virtio_irq(vq);
+                    pthread_mutex_unlock(&interrupt_lock);
+                } else {
+                    printf("[ERROR] Locking failed\n");
+                    exit(1);
+                }
             }
-
         }
     }
 }
@@ -1226,7 +1232,7 @@ void virtio_loopback_update_irq(VirtIODevice *vdev)
     DBG("prev_level: %d\n", prev_level);
 
     if (!((level == 1) && (prev_level == 0))) {
-        DBG("!((level == 1) && (prev_level == 0))\n");
+        DBG("No interrupt\n");
         prev_level = level;
         return;
     }
@@ -1236,7 +1242,6 @@ void virtio_loopback_update_irq(VirtIODevice *vdev)
     DBG("Interrupt counter: %d\n", int_count++);
 
     (void) ioctl(fd, IRQ, &irq_num);
-
 }
 
 bool enable_virtio_interrupt;
@@ -1280,7 +1285,6 @@ void virtio_queue_notify(VirtIODevice *vdev, int n)
     }
 
     if (vq->host_notifier_enabled) {
-        DBG("vq->host_notifier_enabled\n");
         event_notifier_set(&vq->host_notifier);
     } else if (vq->handle_output) {
         DBG("vq->handle_output\n");
@@ -1396,8 +1400,6 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
 {
 
     uint64_t ret;
-
-    DBG("READ\n");
 
     if (!vdev) {
         /*
@@ -1545,14 +1547,13 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
     return 0;
 }
 
-uint64_t vring_phys_addrs[2] = {0};
+uint64_t vring_phys_addrs[10] = {0};
 uint32_t vring_phys_addrs_idx;
 static int notify_cnt;
 
 void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
                        uint64_t value, unsigned size)
 {
-
     if (!vdev) {
         /*
          * If no backend is present, we just make all registers
@@ -1690,7 +1691,7 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         /* TODO: To be implemented */
         break;
     case VIRTIO_MMIO_QUEUE_NOTIFY:
-        DBG("\nVIRTIO_MMIO_QUEUE_NOTIFY: vq_index -> %d, notify_cnt: %d\n",
+        DBG("VIRTIO_MMIO_QUEUE_NOTIFY: vq_index -> %d, notify_cnt: %d\n",
             value, notify_cnt++);
         if (value < VIRTIO_QUEUE_MAX) {
             virtio_queue_notify(vdev, value);
@@ -1824,39 +1825,6 @@ void adapter_read_write_cb(void)
 
 }
 
-void *notify_select(void *data)
-{
-    int retval;
-    fd_set rfds;
-    uint64_t eftd_ctr;
-    int efd = *(int *)data;
-    int32_t vq_index;
-
-    DBG("\nWaiting for loopback notify events\n");
-
-    FD_ZERO(&rfds);
-    FD_SET(efd, &rfds);
-
-    while (1) {
-
-        retval = select(efd + 1, &rfds, NULL, NULL, NULL);
-
-        if (retval > 0) {
-            s = read(efd, &eftd_ctr, sizeof(uint64_t));
-            if (s != sizeof(uint64_t)) {
-                DBG("Eventfd read error\n");
-                exit(1);
-            } else {
-                DBG("\nnotify select\n");
-                (void)ioctl(fd, SHARE_NOTIFIED_VQ_INDEX, &vq_index);
-                DBG("\nnotify_select: vq_index -> %d, notify_cnt: %d,"
-                    "eventfd_val: %lu\n\n", vq_index, notify_cnt++, eftd_ctr);
-                virtio_queue_notify(global_vdev, vq_index);
-            }
-        }
-    }
-}
-
 void *driver_event_select(void *data)
 {
     int retval;
@@ -1937,6 +1905,20 @@ void virtio_dev_init(VirtIODevice *vdev, const char *name,
 
     DBG("virtio_dev_init\n");
 
+    /* Initialize global variables */
+    prev_level = 0;
+    int_count = 0;
+    eventfd_count = 0;
+    enable_virtio_interrupt = false;
+    vring_phys_addrs_idx = 0;
+    notify_cnt = 0;
+
+    /* Initialize interrupt mutex */
+    if (pthread_mutex_init(&interrupt_lock, NULL) != 0) {
+        printf("[ERROR] mutex init has failed\n");
+        exit(1);
+    }
+
     vdev->start_on_kick = false;
     vdev->started = false;
     vdev->device_id = device_id;
@@ -2004,17 +1986,8 @@ int virtio_loopback_start(void)
 {
     efd_data_t info;
     pthread_t thread_id;
-    pthread_t thread_id_notify;
     int ret = -1;
     int flags;
-
-    /* Initialize global variables */
-    prev_level = 0;
-    int_count = 0;
-    eventfd_count = 0;
-    enable_virtio_interrupt = false;
-    vring_phys_addrs_idx = 0;
-    notify_cnt = 0;
 
     fd = open("/dev/loopback", O_RDWR);
     if (fd < 0) {
@@ -2030,15 +2003,8 @@ int virtio_loopback_start(void)
         exit(EXIT_FAILURE);
     }
 
-    efd_notify = eventfd(0, 0);
-    if (efd_notify == -1) {
-        DBG("\nUnable to create eventfd! Exiting...\n");
-        exit(EXIT_FAILURE);
-    }
-
     info.pid = getpid();
     info.efd[0] = efd;
-    info.efd[1] = efd_notify;
 
     /*
      * Send the appropriate information to the driver
@@ -2060,22 +2026,10 @@ int virtio_loopback_start(void)
         exit(1);
     }
 
-    /* Wait the eventfd */
-    ret = pthread_create(&thread_id_notify, NULL, notify_select,
-                        (void *)&efd_notify);
-    if (ret != 0) {
-        exit(1);
-    }
-
     /* Start loopback transport */
     (void)ioctl(fd, START_LOOPBACK, &device_info);
 
     ret = pthread_join(thread_id, NULL);
-    if (ret != 0) {
-        exit(1);
-    }
-
-    ret = pthread_join(thread_id_notify, NULL);
     if (ret != 0) {
         exit(1);
     }

@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2021 Mathieu Poirier <mathieu.poirier@linaro.org>
  *
- * Copyright (c) 2022 Virtual Open Systems SAS.
+ * Copyright (c) 2022-2023 Virtual Open Systems SAS.
  *
  * Author:
  *  Timos Ampelikiotis <t.ampelikiotis@virtualopensystems.com>

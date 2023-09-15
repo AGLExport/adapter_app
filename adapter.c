@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 Virtual Open Systems SAS.
+ * Copyright 2022-2023 Virtual Open Systems SAS
  *
  * Authors:
  *  Timos Ampelikiotis <t.ampelikiotis@virtualopensystems.com>
@@ -47,6 +47,7 @@
 #include "vhost_user_rng.h"
 #include "vhost_user_blk.h"
 #include "vhost_user_input.h"
+#include "vhost_user_gpio.h"
 
 #ifdef DEBUG
 #define DBG(...) printf("adapter: " __VA_ARGS__)
@@ -137,7 +138,7 @@ static void help_args(void)
            "\t\t  [ -qn number of queues ]\n"
            "\t\t  [ -qs size of queues ]\n"
            "The 'device_name' can be one of the following:\n"
-           "\tvrng, vhurng, vhublk, vhuinput, vhusnd, vhugpio\n");
+           "\tvrng, vhurng, vhublk, vhuinput, vhugpio\n");
 }
 
 int find_arg(int argc, char **argv, char *str)
@@ -154,9 +155,10 @@ int find_arg(int argc, char **argv, char *str)
 
 int val_device_arg(char *str)
 {
-    char *adapter_devices[] = {"vrng", "vhurng", "vhublk", "vhuinput"};
-    char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput"};
-    int adapter_devices_num = 4, i;
+    char *adapter_devices[] = {"vrng", "vhurng", "vhublk", "vhuinput",
+                               "vhugpio"};
+    char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput", "vhugpio"};
+    int adapter_devices_num = 5, i;
 
     for (i = 0; i < adapter_devices_num; i++) {
         if (!strcmp(adapter_devices[i], str)) {
@@ -169,8 +171,8 @@ int val_device_arg(char *str)
 
 bool check_vhu_device(char *str)
 {
-    char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput"};
-    int vhu_devices_num = 3, i;
+    char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput", "vhugpio"};
+    int vhu_devices_num = 4, i;
 
     for (i = 0; i < vhu_devices_num; i++) {
         if (!strcmp(vhu_devices[i], str)) {
@@ -269,6 +271,7 @@ int main(int argc, char **argv)
     vhost_user_adapter_init();
 
     /* Initialize the virtio/vhost-user device */
+    /* TODO: Switch numbers with name defs */
     switch (device_id) {
     case 1:
         virtio_rng_realize();
@@ -285,6 +288,9 @@ int main(int argc, char **argv)
     case 4:
         vhost_user_input_init(global_vdev);
         virtio_input_device_realize();
+        break;
+    case 5:
+        vu_gpio_device_realize();
         break;
     default:
         exit(1);

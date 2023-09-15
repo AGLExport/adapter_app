@@ -16,7 +16,7 @@
  *
  *  3) vhost.h of QEMU project
  *
- * Copyright 2022 Virtual Open Systems SAS.
+ * Copyright 2022-2023 Virtual Open Systems SAS.
  *
  * This work is licensed under the terms of the GNU GPL, version 2.  See
  * the COPYING file in the top-level directory.
@@ -167,7 +167,6 @@
 #define SHARE_VQS _IOC(_IOC_WRITE, 'k', 5, sizeof(uint32_t))
 #define SHARE_BUF _IOC(_IOC_WRITE, 'k', 6, sizeof(uint64_t))
 #define SHARE_COM_STRUCT _IOC(_IOC_WRITE, 'k', 7, 0)
-#define SHARE_NOTIFIED_VQ_INDEX _IOC(_IOC_WRITE, 'k', 8, sizeof(int32_t))
 
 #define VIRTIO_PCI_VRING_ALIGN         4096
 
@@ -261,7 +260,7 @@ typedef struct VirtIOMMIOProxy {
         const typeof(((type *) 0)->member) *__mptr = (ptr);     \
         (type *) ((char *) __mptr - offsetof(type, member));})
 
-extern uint64_t vring_phys_addrs[2];
+extern uint64_t vring_phys_addrs[10];
 extern uint32_t vring_phys_addrs_idx;
 
 typedef struct VRing {
@@ -363,6 +362,8 @@ typedef struct VHostUserRNG VHostUserRNG;
 typedef struct VirtioDeviceClass VirtioDeviceClass;
 typedef struct VHostUserBlk VHostUserBlk;
 typedef struct VhostUserInput VhostUserInput;
+typedef struct VHostUserGPIO VHostUserGPIO;
+typedef struct VHostUserSound VHostUserSound;
 typedef struct VirtioBus VirtioBus;
 
 typedef struct VirtIODevice {
@@ -402,6 +403,8 @@ typedef struct VirtIODevice {
     VHostUserRNG *vhrng;
     VHostUserBlk *vhublk;
     VhostUserInput *vhuinput;
+    VHostUserSound *vhusnd;
+    VHostUserGPIO *vhugpio;
 } VirtIODevice;
 
 typedef struct efd_data {
@@ -690,7 +693,7 @@ uint32_t get_vqs_max_size(VirtIODevice *vdev);
  * memory blocks from the kernel:
  * 0x40000000 = 1024 * 1024 * 1024 = 64 * 4096 * 4096 = 1G
  */
-#define OFFSET_1GB 64ULL * PAGE_SIZE * PAGE_SIZE
+#define OFFSET_1GB (64ULL * PAGE_SIZE * PAGE_SIZE)
 
 /*
  * Define starting physical address of host memory address space

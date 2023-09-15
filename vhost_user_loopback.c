@@ -9,7 +9,7 @@
  *    Marc-André Lureau <mlureau@redhat.com>
  *    Victor Kaplansky <victork@redhat.com>
  *
- * Copyright 2022 Virtual Open Systems SAS.
+ * Copyright 2022-2023 Virtual Open Systems SAS.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

@@ -1,4 +1,4 @@
-# Copyright 2022 Virtual Open Systems SAS.
+# Copyright 2022-2023 Virtual Open Systems SAS
 #
 # Authors:
 #  Timos Ampelikiotis <t.ampelikiotis@virtualopensystems.com>
@@ -21,7 +21,7 @@
 #CFLAGS := -Wall -Wextra -Werror
 #CFLAGS := -Wall -Wextra -Wno-unused-variable -Wno-unused-function
 CFLAGS := -Wno-unused-variable -Wno-unused-function -D_GNU_SOURCE
-CFLAGS = -D_GNU_SOURCE -O2 -static
+CFLAGS = -D_GNU_SOURCE -O2
 CC ?=
 
 ifeq ($(ARCH), arm64)
@@ -33,7 +33,7 @@ endif
 
 INCL += -I .
 DEPS = adapter.h vhost_user_loopback.h event_notifier.h virtio_loopback.h
-SRC_C = event_notifier.c vhost_user_loopback.c virtio_loopback.c virtio_rng.c virtio_input.c vhost_user_input.c vhost_user_blk.c vhost_user_rng.c vhost_loopback.c adapter.c
+SRC_C = event_notifier.c vhost_user_loopback.c virtio_loopback.c virtio_rng.c virtio_input.c vhost_user_input.c vhost_user_blk.c vhost_user_rng.c vhost_user_gpio.c vhost_loopback.c adapter.c
 
 OBJS = $(SRC_C:.c=.o)
 BINS = adapter
