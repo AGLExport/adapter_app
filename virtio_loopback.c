@@ -1032,20 +1032,19 @@ void *loopback_event_select(void *_e)
         }
         if (retval > 0) {
 
+            if (pthread_mutex_lock(&interrupt_lock) != 0) {
+                printf("[ERROR] Locking failed\n");
+                exit(1);
+            }
             DBG("\n\nEvent has come from the vhost-user-device "
                 "(eventfd: %d) -> event_count: %d (select value: %d)\n\n",
                                               rfd, eventfd_count, retval);
 
             if (event_notifier_test_and_clear(e)) {
-                if (pthread_mutex_lock(&interrupt_lock) == 0) {
-                    eventfd_count++;
-                    virtio_irq(vq);
-                    pthread_mutex_unlock(&interrupt_lock);
-                } else {
-                    printf("[ERROR] Locking failed\n");
-                    exit(1);
-                }
+                eventfd_count++;
+                virtio_irq(vq);
             }
+            pthread_mutex_unlock(&interrupt_lock);
         }
     }
 }
