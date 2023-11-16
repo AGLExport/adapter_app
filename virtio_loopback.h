@@ -364,6 +364,7 @@ typedef struct VHostUserBlk VHostUserBlk;
 typedef struct VhostUserInput VhostUserInput;
 typedef struct VHostUserGPIO VHostUserGPIO;
 typedef struct VHostUserSound VHostUserSound;
+typedef struct VHostUserCan VHostUserCan;
 typedef struct VirtioBus VirtioBus;
 
 typedef struct VirtIODevice {
@@ -405,6 +406,7 @@ typedef struct VirtIODevice {
     VhostUserInput *vhuinput;
     VHostUserSound *vhusnd;
     VHostUserGPIO *vhugpio;
+    VHostUserCan *vhucan;
 } VirtIODevice;
 
 typedef struct efd_data {
@@ -659,7 +661,9 @@ uint32_t get_vqs_max_size(VirtIODevice *vdev);
  * Legacy name for VIRTIO_F_ACCESS_PLATFORM
  * (for compatibility with old userspace)
  */
+#ifndef VIRTIO_F_IOMMU_PLATFORM
 #define VIRTIO_F_IOMMU_PLATFORM          33
+#endif
 
 /* QEMU Aligned functions */
 /*

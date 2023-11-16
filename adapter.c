@@ -49,6 +49,7 @@
 #include "vhost_user_input.h"
 #include "vhost_user_gpio.h"
 #include "vhost_user_sound.h"
+#include "vhost_user_can.h"
 
 
 #ifdef DEBUG
@@ -158,9 +159,10 @@ int find_arg(int argc, char **argv, char *str)
 int val_device_arg(char *str)
 {
     char *adapter_devices[] = {"vrng", "vhurng", "vhublk", "vhuinput",
-                               "vhusnd", "vhugpio"};
-    char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput", "vhusnd", "vhugpio"};
-    int adapter_devices_num = 6, i;
+                               "vhusnd", "vhugpio", "vhucan"};
+    char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput", "vhusnd",
+                           "vhugpio", "vhucan"};
+    int adapter_devices_num = 7, i;
 
     for (i = 0; i < adapter_devices_num; i++) {
         if (!strcmp(adapter_devices[i], str)) {
@@ -173,8 +175,9 @@ int val_device_arg(char *str)
 
 bool check_vhu_device(char *str)
 {
-    char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput", "vhusnd", "vhugpio"};
-    int vhu_devices_num = 5, i;
+    char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput", "vhusnd",
+                           "vhugpio", "vhucan"};
+    int vhu_devices_num = 6, i;
 
     for (i = 0; i < vhu_devices_num; i++) {
         if (!strcmp(vhu_devices[i], str)) {
@@ -296,6 +299,9 @@ int main(int argc, char **argv)
         break;
     case 6:
         vu_gpio_device_realize();
+        break;
+    case 7:
+        vhost_user_can_realize();
         break;
     default:
         exit(1);

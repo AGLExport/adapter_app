@@ -1459,7 +1459,6 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
     case VIRTIO_MMIO_MAGIC_VALUE:
         return VIRT_MAGIC;
     case VIRTIO_MMIO_VERSION:
-        DBG("VIRTIO_MMIO_VERSION ->\n");
         if (proxy->legacy) {
             DBG("VIRTIO_MMIO_VERSION -> legacy\n");
             return VIRT_VERSION_LEGACY;
@@ -1601,8 +1600,6 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
     case VIRTIO_MMIO_DRIVER_FEATURES:
         if (proxy->legacy) {
             if (proxy->guest_features_sel) {
-                DBG("attempt to write guest features with "
-                       "guest_features_sel > 0 in legacy mode\n");
                 DBG("Set driver features: 0x%lx\n", value << 32);
                 virtio_set_features(vdev, value << 32);
             } else {
@@ -1690,7 +1687,7 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         /* TODO: To be implemented */
         break;
     case VIRTIO_MMIO_QUEUE_NOTIFY:
-        DBG("VIRTIO_MMIO_QUEUE_NOTIFY: vq_index -> %d, notify_cnt: %d\n",
+        DBG("VIRTIO_MMIO_QUEUE_NOTIFY: vq_index -> %lu, notify_cnt: %d\n",
             value, notify_cnt++);
         if (value < VIRTIO_QUEUE_MAX) {
             virtio_queue_notify(vdev, value);

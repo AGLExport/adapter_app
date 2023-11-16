@@ -330,7 +330,7 @@ void update_mem_table(VirtIODevice *vdev)
 
 static int vhost_dev_set_vring_enable(struct vhost_dev *hdev, int enable)
 {
-    DBG("vhost_dev_set_vring_enable not yet implemented\n");
+    DBG("vhost_dev_set_vring_enable:\n");
 
     /*
      * For vhost-user devices, if VHOST_USER_F_PROTOCOL_FEATURES has not

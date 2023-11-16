@@ -33,7 +33,7 @@ endif
 
 INCL += -I .
 DEPS = adapter.h vhost_user_loopback.h event_notifier.h virtio_loopback.h
-SRC_C = event_notifier.c vhost_user_loopback.c virtio_loopback.c virtio_rng.c virtio_input.c vhost_user_input.c vhost_user_blk.c vhost_user_rng.c vhost_user_sound.c vhost_user_gpio.c vhost_loopback.c adapter.c
+SRC_C = event_notifier.c vhost_user_loopback.c virtio_loopback.c virtio_rng.c virtio_input.c vhost_user_input.c vhost_user_blk.c vhost_user_rng.c vhost_user_sound.c vhost_user_gpio.c vhost_user_can.c vhost_loopback.c adapter.c
 
 OBJS = $(SRC_C:.c=.o)
 BINS = adapter

@@ -847,7 +847,8 @@ static int vhost_user_fill_set_mem_table_msg(struct vhost_user *u,
                 u->region_rb_offset[i] = offset;
                 u->region_rb[i] = mr->ram_block;
             } else if (*fd_num == VHOST_MEMORY_BASELINE_NREGIONS) {
-                DBG("Failed preparing vhost-user memory table msg: %d\n", *fd_num);
+                DBG("Failed preparing vhost-user memory table msg: %lu\n",
+                    *fd_num);
                 return -1;
             }
             vhost_user_fill_msg_region(&region_buffer, reg, offset);
@@ -1180,7 +1181,7 @@ int vhost_user_set_mem_table(struct vhost_dev *dev)
         }
 
         /* Update message parameters */
-        DBG("\nfd_num: %d\n", fd_num);
+        DBG("\nfd_num: %lu\n", fd_num);
         msg.fd_num = fd_num;
         memcpy(msg.fds, fds, fd_num * sizeof(int));
 
@@ -1585,14 +1586,14 @@ void vhost_dev_init(struct vhost_dev *vhdev)
      */
 
     vhdev->features = features;
-    DBG("vhdev->backend_features 0x%llx\n", vhdev->backend_features);
-    DBG("vhdev->features 0x%llx\n", vhdev->features);
+    DBG("vhdev->backend_features 0x%lx\n", vhdev->backend_features);
+    DBG("vhdev->features 0x%lx\n", vhdev->features);
 }
 
 int vhost_user_set_vring_enable(struct vhost_dev *dev, int enable)
 {
     int i;
-    DBG("vhost_user_set_vring_enable not yet implemented\n");
+    DBG("vhost_user_set_vring_enable:\n");
 
     if (!virtio_has_feature(dev->features, VHOST_USER_F_PROTOCOL_FEATURES)) {
         DBG("Does not have VHOST_USER_F_PROTOCOL_FEATURES\n");
