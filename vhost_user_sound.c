@@ -91,6 +91,9 @@ static void vus_start(VirtIODevice *vdev)
         goto err_guest_notifiers;
     }
 
+    /* Wait a bit before the vrings be set in vhost-user-device */
+    sleep(1);
+
     /*
      * guest_notifier_mask/pending not used yet, so just unmask
      * everything here.  virtio-pci will do the right thing by
