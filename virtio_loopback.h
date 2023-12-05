@@ -365,6 +365,7 @@ typedef struct VhostUserInput VhostUserInput;
 typedef struct VHostUserGPIO VHostUserGPIO;
 typedef struct VHostUserSound VHostUserSound;
 typedef struct VHostUserCan VHostUserCan;
+typedef struct VHostUserConsole VHostUserConsole;
 typedef struct VirtioBus VirtioBus;
 
 typedef struct VirtIODevice {
@@ -407,6 +408,7 @@ typedef struct VirtIODevice {
     VHostUserSound *vhusnd;
     VHostUserGPIO *vhugpio;
     VHostUserCan *vhucan;
+    VHostUserConsole *vhuconsole;
 } VirtIODevice;
 
 typedef struct efd_data {

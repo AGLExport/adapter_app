@@ -50,6 +50,7 @@
 #include "vhost_user_gpio.h"
 #include "vhost_user_sound.h"
 #include "vhost_user_can.h"
+#include "vhost_user_console.h"
 
 
 #ifdef DEBUG
@@ -141,7 +142,7 @@ static void help_args(void)
            "\t\t  [ -qn number of queues ]\n"
            "\t\t  [ -qs size of queues ]\n"
            "The 'device_name' can be one of the following:\n"
-           "\tvrng, vhurng, vhublk, vhuinput, vhusnd, vhugpio\n");
+           "\tvrng, vhurng, vhublk, vhuinput, vhusnd, vhugpio, vhucan, vhuconsole\n");
 }
 
 int find_arg(int argc, char **argv, char *str)
@@ -159,10 +160,10 @@ int find_arg(int argc, char **argv, char *str)
 int val_device_arg(char *str)
 {
     char *adapter_devices[] = {"vrng", "vhurng", "vhublk", "vhuinput",
-                               "vhusnd", "vhugpio", "vhucan"};
+                               "vhusnd", "vhugpio", "vhucan", "vhuconsole"};
     char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput", "vhusnd",
-                           "vhugpio", "vhucan"};
-    int adapter_devices_num = 7, i;
+                           "vhugpio", "vhucan", "vhuconsole"};
+    int adapter_devices_num = 8, i;
 
     for (i = 0; i < adapter_devices_num; i++) {
         if (!strcmp(adapter_devices[i], str)) {
@@ -176,8 +177,8 @@ int val_device_arg(char *str)
 bool check_vhu_device(char *str)
 {
     char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput", "vhusnd",
-                           "vhugpio", "vhucan"};
-    int vhu_devices_num = 6, i;
+                           "vhugpio", "vhucan", "vhuconsole"};
+    int vhu_devices_num = 7, i;
 
     for (i = 0; i < vhu_devices_num; i++) {
         if (!strcmp(vhu_devices[i], str)) {
@@ -302,6 +303,9 @@ int main(int argc, char **argv)
         break;
     case 7:
         vhost_user_can_realize();
+        break;
+    case 8:
+        vhost_user_console_realize();
         break;
     default:
         exit(1);

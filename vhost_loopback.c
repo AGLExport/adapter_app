@@ -240,7 +240,7 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
     a = virtio_queue_get_desc_addr(vdev, idx);
     if (a == 0) {
         /* Queue might not be ready for start */
-        DBG("Error: Queue might not be ready for start\n");
+        DBG("Error: Queue (%d) might not be ready for start\n", idx);
         return 0;
     }
 
