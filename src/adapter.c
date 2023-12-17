@@ -43,13 +43,24 @@
 /* Project header files */
 #include "virtio_loopback.h"
 #include "vhost_user_loopback.h"
+#ifdef ENABLE_VHOST_RNG
 #include "virtio_rng.h"
+#endif
+#ifdef ENABLE_VHOST_USER_RNG
 #include "vhost_user_rng.h"
+#endif
+#ifdef ENABLE_VHOST_USER_BLK
 #include "vhost_user_blk.h"
+#endif
+#ifdef ENABLE_VHOST_USER_INPUT
 #include "vhost_user_input.h"
+#endif
+#ifdef ENABLE_VHOST_USER_GPIO
 #include "vhost_user_gpio.h"
+#endif
+#ifdef ENABLE_VHOST_USER_SOUND
 #include "vhost_user_sound.h"
-
+#endif
 
 #ifdef DEBUG
 #define DBG(...) printf("adapter: " __VA_ARGS__)
@@ -277,26 +288,56 @@ int main(int argc, char **argv)
     /* TODO: Switch numbers with name defs */
     switch (device_id) {
     case 1:
+        #ifdef ENABLE_VHOST_RNG
         virtio_rng_realize();
+        #else
+        fprintf(stderr,"The vrng is disabled in this binary.\n");
+        exit(1);
+        #endif
         break;
     case 2:
+        #ifdef ENABLE_VHOST_USER_RNG
         vhost_user_rng_realize();
+        #else
+        fprintf(stderr,"The vhurng is disabled in this binary.\n");
+        exit(1);
+        #endif
         break;
     case 3:
+        #ifdef ENABLE_VHOST_USER_BLK
         get_queue_num_size_args(argc, argv, &queue_num, &queue_size);
-        printf("Running vhublk with num %d and size %d\n",
+        fprintf(stdout,"Running vhublk with num %d and size %d\n",
                                             queue_num, queue_size);
         vhost_user_blk_realize(queue_num, queue_size);
+        #else
+        fprintf(stderr,"The vhublk is disabled in this binary.\n");
+        exit(1);
+        #endif
         break;
     case 4:
+        #ifdef ENABLE_VHOST_USER_INPUT
         vhost_user_input_init(global_vdev);
         virtio_input_device_realize();
+        #else
+        fprintf(stderr,"The vhuinput is disabled in this binary.\n");
+        exit(1);
+        #endif
         break;
     case 5:
+        #ifdef ENABLE_VHOST_USER_SOUND
         vus_device_realize();
+        #else
+        fprintf(stderr,"The vhusnd is disabled in this binary.\n");
+        exit(1);
+        #endif
         break;
     case 6:
+        #ifdef ENABLE_VHOST_USER_GPIO
         vu_gpio_device_realize();
+        #else
+        fprintf(stderr,"The vhugpio is disabled in this binary.\n");
+        exit(1);
+        #endif
         break;
     default:
         exit(1);
