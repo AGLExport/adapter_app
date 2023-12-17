@@ -46,7 +46,7 @@ AC_ARG_ENABLE([vhost-user-sound],
   [AS_HELP_STRING([--vhost-user-sound], [Enable vhost user sound (default is yes)])],
   [:],
   [enable_vhost_user_sound=yes])
-AM_CONDITIONAL([ENABLE_VHOST_USER_SOUND], [test "$enable_vhost_user_gpio" = "yes"])
+AM_CONDITIONAL([ENABLE_VHOST_USER_SOUND], [test "$enable_vhost_user_sound" = "yes"])
 
 AC_ARG_ENABLE([address-sanitizer],
   [AS_HELP_STRING([--enable-address-sanitizer], [Enable address sanitizer in build time (for debug, default is no)])],
