@@ -13,37 +13,37 @@ AC_CONFIG_HEADERS([include/config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
 AC_ARG_ENABLE([vhost-rng],
-  [AS_HELP_STRING([--vhost-rng], [Enable vhost rng (default is no)])],
+  [AS_HELP_STRING([--enable-vhost-rng], [Enable vhost rng (default is no)])],
   [:],
   [enable_vhost_rng=no])
 AM_CONDITIONAL([ENABLE_VHOST_RNG], [test "$enable_vhost_rng" = "yes"])
 
 AC_ARG_ENABLE([vhost-user-rng],
-  [AS_HELP_STRING([--vhost-user-rng], [Enable vhost user rng (default is no)])],
+  [AS_HELP_STRING([--enable-vhost-user-rng], [Enable vhost user rng (default is no)])],
   [:],
   [enable_vhost_user_rng=no])
 AM_CONDITIONAL([ENABLE_VHOST_USER_RNG], [test "$enable_vhost_user_rng" = "yes"])
 
 AC_ARG_ENABLE([vhost-user-blk],
-  [AS_HELP_STRING([--vhost-user-blk], [Enable vhost user blk (default is no)])],
+  [AS_HELP_STRING([--enable-vhost-user-blk], [Enable vhost user blk (default is no)])],
   [:],
   [enable_vhost_user_blk=no])
 AM_CONDITIONAL([ENABLE_VHOST_USER_BLK], [test "$enable_vhost_user_blk" = "yes"])
 
 AC_ARG_ENABLE([vhost-user-input],
-  [AS_HELP_STRING([--vhost-user-input], [Enable vhost user input (default is no)])],
+  [AS_HELP_STRING([--enable-vhost-user-input], [Enable vhost user input (default is no)])],
   [:],
   [enable_vhost_user_input=no])
 AM_CONDITIONAL([ENABLE_VHOST_USER_INPUT], [test "$enable_vhost_user_input" = "yes"])
 
 AC_ARG_ENABLE([vhost-user-gpio],
-  [AS_HELP_STRING([--vhost-user-gpio], [Enable vhost user gpio (default is no)])],
+  [AS_HELP_STRING([--enable-vhost-user-gpio], [Enable vhost user gpio (default is no)])],
   [:],
   [enable_vhost_user_gpio=no])
 AM_CONDITIONAL([ENABLE_VHOST_USER_GPIO], [test "$enable_vhost_user_gpio" = "yes"])
 
 AC_ARG_ENABLE([vhost-user-sound],
-  [AS_HELP_STRING([--vhost-user-sound], [Enable vhost user sound (default is yes)])],
+  [AS_HELP_STRING([--enable-vhost-user-sound], [Enable vhost user sound (default is yes)])],
   [:],
   [enable_vhost_user_sound=yes])
 AM_CONDITIONAL([ENABLE_VHOST_USER_SOUND], [test "$enable_vhost_user_sound" = "yes"])
