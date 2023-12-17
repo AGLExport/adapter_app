@@ -5,3 +5,11 @@ make_bins.sh
 *.o
 *.c.*
 *.h.*
+config.*
+depcomp
+install-sh
+*.in
+m4
+autom4te.cache
+*.m4
+compile
