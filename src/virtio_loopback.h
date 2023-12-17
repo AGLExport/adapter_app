@@ -659,7 +659,9 @@ uint32_t get_vqs_max_size(VirtIODevice *vdev);
  * Legacy name for VIRTIO_F_ACCESS_PLATFORM
  * (for compatibility with old userspace)
  */
+#ifndef VIRTIO_F_IOMMU_PLATFORM
 #define VIRTIO_F_IOMMU_PLATFORM          33
+#endif
 
 /* QEMU Aligned functions */
 /*
